@@ -61,6 +61,18 @@ ChiselTipMesh = function(options) {
     this.getLifetime = function() {
         return duration;
     }
+
+    this.isAnimating = function() {
+        var timeSeconds = Date.now()/1000;
+        if (timeSeconds - startTimeSeconds < duration) 
+        {
+            return true;
+        }
+        else 
+        {
+            return false;
+        }
+    }
 }
 
 ChiselTipMesh.prototype = Object.create(THREE.Mesh.prototype);
