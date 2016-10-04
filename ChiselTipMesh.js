@@ -6,14 +6,14 @@ ChiselTipMesh = function(options) {
   var lineWidth = options.lineWidth;
   var color = options.color;
 
-  var duration = 5.5; // seconds for the entire animation
+  var duration = 0.5; // seconds for the entire animation
 
   var geometry = new ChiselTipGeometry(strokeData, degrees, lineWidth);
 
   var material = new THREE.ShaderMaterial({
     uniforms: {
       color: { value: color },
-      speed: { value: 0.0 }, // animation speed factor (1.0 will show at the same speed as capture)
+      speed: { value: 2.0 }, // animation speed factor (1.0 will show at the same speed as capture)
       clock: { value: 0.0 },
     },
     vertexShader: `

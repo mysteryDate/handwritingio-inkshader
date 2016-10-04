@@ -50,9 +50,7 @@
       degrees: 60,
       lineWidth: 5,
       color: "#000ff0",
-      meshcolor: "#000ff0",
       wireframe: false,
-      speed: 0.0,
 
       restart: function() {
         if (mesh) {
@@ -60,15 +58,13 @@
           scene.remove(mesh);
         }
         mesh = new ChiselTipMesh({
-          strokeData: TestStrokes[2].strokeData,
+          strokeData: TestStrokes[0].strokeData,
           degrees: controller.degrees,
           lineWidth: controller.lineWidth,
           color: new THREE.Color(controller.color),
         });
         mesh.geometry.center();
         mesh.material.wireframe = controller.wireframe;
-        mesh.material.color = controller.meshcolor;
-        mesh.material.speed = controller.speed;
         scene.add(mesh);
         mesh.start();
       }
@@ -79,8 +75,6 @@
     gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
     gui.addColor(controller, "color").onChange(controller.restart);
     gui.add(controller, "wireframe").onChange(controller.restart);
-    gui.add(controller, "meshcolor");
-    gui.add(controller, "speed");
 
     gui.add(controller, "restart");
 
