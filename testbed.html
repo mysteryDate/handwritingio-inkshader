@@ -22,7 +22,8 @@
 </head>
 <body>
 
-    <script id="vertexShader" type="x-shader/x-vertex">
+
+    <script id="vertex-shader" type="x-shader/x-vertex">
         varying vec2 vUv;
         void main() {
             vUv = uv;
@@ -30,13 +31,64 @@
         }
     </script>
 
-    <script id="fragment_shader_screen" type="x-shader/x-fragment">
+    <script id="fragment-shader-screen" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        uniform sampler2D writingTex;
+        #define damping 0.99  
+
+        void main() {
+            vec2 offset[4];
+            offset[0] = vec2(-1.0,0.0);
+            offset[1] = vec2(1.0,0.0);
+            offset[2] = vec2(0.0,1.0);
+            offset[3] = vec2(0.0,-1.0);
+            float sum = 0.;
+            for(int i = 0; i < 4; i++) {
+                sum += texture2D(writingTex, vUv + offset[i] / vec2(600,600)).r;
+            }
+            gl_FragColor = texture2D( writingTex, vUv );
+        }
+    </script>
+
+    <script id="fragment-shader-ripples" type="x-shader/x-fragment">
         varying vec2 vUv;
         uniform sampler2D writingTex;
 
-        void main() {
-            gl_FragColor = texture2D( writingTex, vUv );
+        #define damping 0.99  
+        vec2 offset[4];
+
+        bool reset() {
+            return texture2D(iChannel3, vec2(32.5/256.0, 0.5) ).x > 0.5;  
         }
+            
+        void mainImage( out vec4 fragColor, in vec2 fragCoord )
+        { 
+            float dMouse = 0.0; 
+            vec2 uv = fragCoord.xy / iResolution.xy;
+            
+            offset[0] = vec2(-1.0,0.0);
+            offset[1] = vec2(1.0,0.0);
+            offset[2] = vec2(0.0,1.0);
+            offset[3] = vec2(0.0,-1.0);
+            float sum = 0.;
+            for(int i = 0; i < 4; i++) {
+                sum += texture2D(iChannel0, uv + offset[i] / iResolution.xy).r;
+            }
+            //sum = (sum / 2.0) - texture2D(iChannel1, uv).rgb;
+            sum = (sum - 2.0) - (texture2D(iChannel1, uv).r - 0.5) * 2.;
+            sum *= damping;
+            sum = sum/2.0 + 0.5;
+            
+            if(iMouse.z > 0.0) {
+                dMouse = smoothstep(4.5,.5,length(iMouse.xy - fragCoord.xy));
+            }    
+            if(reset()){
+                fragColor = vec4(0.5,0.5,0.5,1.0);
+            }
+            else {
+                fragColor = vec4(vec3(1.0,1.0,1.0) * (dMouse + sum),1.0);
+            }
+        }    
     </script>
 
     <script>
@@ -49,19 +101,22 @@
         var gui = new dat.GUI();
 
         var camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 2000);
-        camera.position.z = 400;
+        camera.position.z = 300;
         // Separate camera for render to texture
         var cameraRTT = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
         // Texture to render to
-        var rtTexture = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
+        var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
+            stencilBuffer: false } );
+        // For ping-ponging
+        var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
             stencilBuffer: false } );
         // Fullscreen quad scene
         var sceneScreen = new THREE.Scene();
         var materialScreen = new THREE.ShaderMaterial( {
 
-            uniforms: { writingTex: { value: rtTexture.texture } },
-            vertexShader: document.getElementById( 'vertexShader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment_shader_screen' ).textContent,
+            uniforms: { writingTex: { value: tex1.texture } },
+            vertexShader: document.getElementById( 'vertex-shader' ).textContent,
+            fragmentShader: document.getElementById( 'fragment-shader-screen' ).textContent,
 
             depthWrite: false
 
@@ -89,6 +144,7 @@
             lineWidth: 5,
             color: "#000ff0",
             wireframe: false,
+            rttz: camera.position.z,
 
             restart: function() {
                 if (mesh) {
@@ -96,7 +152,7 @@
                     scene.remove(mesh);
                 }
                 mesh = new ChiselTipMesh({
-                    strokeData: TestStrokes[0].strokeData,
+                    strokeData: TestStrokes[3].strokeData,
                     degrees: controller.degrees,
                     lineWidth: controller.lineWidth,
                     color: new THREE.Color(controller.color),
@@ -117,19 +173,31 @@
         gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
         gui.addColor(controller, "color").onChange(controller.restart);
         gui.add(controller, "wireframe").onChange(controller.restart);
+        gui.add(controller,"rttz",0,1000).listen();
 
         gui.add(controller, "restart");
+
+        
 
         function render() {
             requestAnimationFrame(render);
             controls.update();
+            // camera.position.z =controller.rttz;
             stats.update();
 
             // Render whole scene into texture
             // this.render = function ( scene, camera, renderTarget, forceClear ) {
-            renderer.render( scene, cameraRTT, rtTexture, true );
+            renderer.render( scene, cameraRTT, tex1 );
+
+            // Ping pong!
+            var a = tex2;
+            tex2 = tex1;
+            tex1 = a;
+            materialScreen.uniforms.writingTex.value = tex2.texture;
             
-            renderer.render(sceneScreen, camera);
+            renderer.render( sceneScreen, camera);
+            // renderer.render( scene, camera );
+            // renderer.render( scene, cameraRTT );
         }
         render();
     </script>
