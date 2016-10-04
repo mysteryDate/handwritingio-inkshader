@@ -21,6 +21,24 @@
     </style>
 </head>
 <body>
+
+    <script id="vertexShader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+    </script>
+
+    <script id="fragment_shader_screen" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        uniform sampler2D tDiffuse;
+
+        void main() {
+            gl_FragColor = texture2D( tDiffuse, vUv );
+        }
+    </script>
+
     <script>
         var canvas = document.createElement('canvas');
         document.body.appendChild(canvas);
