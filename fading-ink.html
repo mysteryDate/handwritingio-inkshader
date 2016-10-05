@@ -116,7 +116,7 @@
         var gui = new dat.GUI();
 
         var camera = new THREE.PerspectiveCamera(90, window.innerWidth/window.innerHeight, 0.1, 2000);
-        camera.position.z = 300;
+        camera.position.z = 400;
         // Separate camera for render to texture
         var cameraRTT = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
         // Texture to render to
@@ -132,7 +132,7 @@
             uniforms: { 
                 writingTex: { value: tex2.texture },
                 iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight)},
-                fadeSpeed: {value: 0.5 }
+                fadeSpeed: {value: 0.2 }
             },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
             fragmentShader: document.getElementById( 'fragment-shader-screen' ).textContent,
@@ -169,7 +169,7 @@
             lineWidth: 2.5,
             color: "#000ff0",
             wireframe: false,
-            fadeSpeed: 0.5,
+            fadeSpeed: 0.2,
 
             restart: function() {
                 if (mesh) {
