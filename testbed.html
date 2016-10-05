@@ -162,7 +162,7 @@
         controls.minDistance = 1;
         controls.maxDistance = 1000;
 
-        var mesh;
+        var mesh, boundingBox;
         var controller = {
             degrees: 60,
             lineWidth: 2.5,
@@ -186,16 +186,17 @@
                 writingScene.add(mesh);
                 mesh.start();
 
-                var bbox = new THREE.Box3().setFromObject(mesh);
+                boundingBox = new THREE.Box3().setFromObject(mesh);
                 var aspect = window.innerWidth / window.innerHeight;
-                var newWidth = bbox.max.x - bbox.min.x;
+                var newWidth = boundingBox.max.x - boundingBox.min.x;
                 var newHeight = newWidth/aspect;
-                cameraRTT = new THREE.OrthographicCamera( bbox.min.x, bbox.max.x, bbox.max.x / aspect, bbox.min.x / aspect, -10000, 10000 );
-                var plane = new THREE.PlaneBufferGeometry( newWidth, newHeight );
+                cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
+                plane = new THREE.PlaneBufferGeometry( newWidth, newHeight );
                 sceneScreen.remove(quad);
-                var quad = new THREE.Mesh( plane, materialScreen );
+                quad = new THREE.Mesh( plane, materialScreen );
                 quad.position.z = -100;
                 sceneScreen.add( quad );
+
                 // // Texture to render to
                 // tex1 = new THREE.WebGLRenderTarget( bbox.max.x - bbox.min.x, (bbox.max.x - bbox.min.x) / aspect, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
                 //     stencilBuffer: false } );
