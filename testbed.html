@@ -31,45 +31,6 @@
         }
     </script>
 
-
-    <!-- no change vertex shader. used for all render stages. -->
-    <script id="vs_output" type="x-shader/x-vertex">
-
-        varying vec2 texCoord;
-
-        void main(void)
-        {
-            texCoord = uv;                              
-            gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
-        }
-    </script>
-
-    <!-- feedback shader -->
-    <script id="fs_feedback" type="x-shader/x-fragment">        
-        // switch on high precision floats
-        #ifdef GL_ES
-        precision highp float;
-        #endif      
-        uniform sampler2D texture;
-        varying vec2 texCoord;
-        uniform float onOpen;
-
-        void main() 
-        {                       
-            // sample textures
-            vec4 result = texture2D(texture, texCoord);
-            result.rgb+=0.001;
-            // result.rgb = mod(result.rgb, 1.0);
-/*          if (onOpen <=1.0){
-                result.rgb=startT.rgb;
-            }*/
-            result.a = 1.0;                                 
-            gl_FragColor = result;              
-        }
-    </script>
-
-
-
     <script id="fragment-shader-simple" type="x-shader/x-fragment">
         varying vec2 vUv;
         uniform sampler2D writingTex;
@@ -95,8 +56,8 @@
             for(int i = 0; i < 4; i++) {
                 sum += texture2D(writingTex, vUv + offset[i]).r;
             }
-            vUv.x += 0.01;
-            gl_FragColor = texture2D( writingTex, vUv );
+            // vUv.x += 0.01;
+            gl_FragColor = texture2D( writingTex, vUv )*0.99;
             // gl_FragColor = vec4(sum, 0., 0., 1.);
         }
     </script>
@@ -143,6 +104,7 @@
     </script>
 
     <script>
+        var loopRes = new THREE.Vector2(64.0, 64.0)
         var canvas = document.createElement('canvas');
         document.body.appendChild(canvas);
 
@@ -155,48 +117,6 @@
         camera.position.z = 300;
         // Separate camera for render to texture
         var cameraRTT = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
-
-        // Stealing =======
-        var loopRes = new THREE.Vector2(640.0, 480.0)
-        var sceneFeedback = new THREE.Scene();
-        // create buffers
-        var renderTargetNearestFloatParams = {
-            minFilter:THREE.NearestFilter,
-            magFilter:THREE.NearestFilter,
-            wrapS:THREE.ClampToEdgeWrapping,
-            wrapT:THREE.ClampToEdgeWrapping,
-            format:THREE.RGBAFormat,
-            stencilBuffer:false,
-            depthBuffer:false,
-            needsUpdate:true,
-            type:THREE.FloatType
-        };
-        var feedbackTexture = new THREE.WebGLRenderTarget( loopRes.x, loopRes.y, renderTargetNearestFloatParams );              
-        var feedbackTexture2 = new THREE.WebGLRenderTarget( loopRes.x, loopRes.y, renderTargetNearestFloatParams ); 
-        var cameraLoop = new THREE.OrthographicCamera( loopRes.x / - 2, loopRes.x / 2, loopRes.y / 2, loopRes.y / - 2, -10000, 10000 );
-
-        // Setup sceneOutput camera
-        var cameraOutput = new THREE.PerspectiveCamera( 60, window.innerWidth/window.innerHeight, 1, 10000 );
-        cameraOutput.position.z = 300;
-
-        // feedback shader
-        var feedbackUniforms = {
-            texture: { type: "t", value: feedbackTexture2 },
-            onOpen: { type: "f", value: 0.0 },
-        };
-        var feedbackMat = new THREE.ShaderMaterial({
-            uniforms: feedbackUniforms,
-            vertexShader: document.getElementById( 'vs_output' ).textContent,
-            fragmentShader: document.getElementById( 'fs_feedback' ).textContent
-        });             
-        var feedbackGeo = new THREE.PlaneBufferGeometry( loopRes.x, loopRes.y );
-        feedbackQuad = new THREE.Mesh( feedbackGeo, feedbackMat );
-        feedbackQuad.position.z = -100;
-        sceneFeedback.add( feedbackQuad );
-        // ============
-
-
-
         // Texture to render to
         var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
             stencilBuffer: false } );
@@ -207,9 +127,9 @@
         var sceneScreen = new THREE.Scene();
         var materialScreen = new THREE.ShaderMaterial( {
 
-            uniforms: { writingTex: { value: feedbackTexture2.texture } },
+            uniforms: { writingTex: { value: tex2.texture } },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-simple' ).textContent,
+            fragmentShader: document.getElementById( 'fragment-shader-screen' ).textContent,
 
             depthWrite: false
 
@@ -263,7 +183,20 @@
 
                 var bbox = new THREE.Box3().setFromObject(mesh);
                 var aspect = window.innerWidth / window.innerHeight;
+                var newWidth = bbox.max.x - bbox.min.x;
+                var newHeight = newWidth/aspect;
                 cameraRTT = new THREE.OrthographicCamera( bbox.min.x, bbox.max.x, bbox.max.x / aspect, bbox.min.x / aspect, -10000, 10000 );
+                var plane = new THREE.PlaneBufferGeometry( newWidth, newHeight );
+                sceneScreen.remove(quad);
+                var quad = new THREE.Mesh( plane, materialScreen );
+                quad.position.z = -100;
+                sceneScreen.add( quad );
+                // // Texture to render to
+                // tex1 = new THREE.WebGLRenderTarget( bbox.max.x - bbox.min.x, (bbox.max.x - bbox.min.x) / aspect, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
+                //     stencilBuffer: false } );
+                // // For ping-ponging
+                // tex2 = new THREE.WebGLRenderTarget( bbox.max.x - bbox.min.x, (bbox.max.x - bbox.min.x) / aspect, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
+                //     stencilBuffer: false } );
             }
         }
         controller.restart();
@@ -289,24 +222,16 @@
             // this.render = function ( writingScene, camera, renderTarget, forceClear ) {
             if ( mesh.isAnimating() ) 
             {
-                renderer.render( writingScene, cameraRTT, feedbackTexture2 );
+                renderer.render( writingScene, cameraRTT, tex2 );
             }
             else 
             {
-                renderer.render( sceneFeedback, cameraLoop, feedbackTexture);
-
-                var a = feedbackTexture2;
-                feedbackTexture2 = feedbackTexture;
-                feedbackTexture = a;
-                feedbackUniforms.texture.value = feedbackTexture2.texture;
-                // renderer.render( sceneScreen, cameraRTT, tex1 );
-                //  // Ping pong!
-                // var a = tex2;
-                // tex2 = tex1;
-                // tex1 = a;
-                // materialScreen.uniforms.writingTex.value = tex2.texture;
-                // materialScreen.fragmentShader = document.getElementById( 'fragment-shader-simple' ).textContent;
-                // outputQuad.material.uniforms.writingTex.value = feedbackTexture2.texture;
+                renderer.render( sceneScreen, cameraRTT, tex1 );
+                 // Ping pong!
+                var a = tex2;
+                tex2 = tex1;
+                tex1 = a;
+                materialScreen.uniforms.writingTex.value = tex2.texture;
             }
 
             renderer.render( outputScene, camera);
