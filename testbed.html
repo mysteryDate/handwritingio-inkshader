@@ -45,7 +45,7 @@
         varying vec2 vUv;
         uniform sampler2D writingTex;
         uniform vec2 iResolution;
-        #define damping 0.99  
+        uniform float fadeSpeed;  
 
         void main() {
             vec2 offset[4];
@@ -60,7 +60,7 @@
             }
             // vUv.x += 0.01;
             vec4 originalColor = texture2D( writingTex, vUv );
-            gl_FragColor = sum*(1.-damping) + originalColor*damping;
+            gl_FragColor = sum*(1.-fadeSpeed) + originalColor*fadeSpeed;
         }
     </script>
 
@@ -131,7 +131,8 @@
 
             uniforms: { 
                 writingTex: { value: tex2.texture },
-                iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+                iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight)},
+                fadeSpeed: {value: 0.5 }
             },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
             fragmentShader: document.getElementById( 'fragment-shader-screen' ).textContent,
@@ -168,7 +169,7 @@
             lineWidth: 2.5,
             color: "#000ff0",
             wireframe: false,
-            rttz: camera.position.z,
+            fadeSpeed: 0.5,
 
             restart: function() {
                 if (mesh) {
@@ -211,7 +212,7 @@
         gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
         gui.addColor(controller, "color").onChange(controller.restart);
         gui.add(controller, "wireframe").onChange(controller.restart);
-        gui.add(controller,"rttz",0,1000).listen();
+        gui.add(controller,"fadeSpeed",0,1).listen();
 
         gui.add(controller, "restart");
 
@@ -220,6 +221,7 @@
         function render() {
             requestAnimationFrame(render);
             controls.update();
+            materialScreen.uniforms.fadeSpeed.value = -0.05*controller.fadeSpeed + 1;
             // camera.position.z =controller.rttz;
             stats.update();
             // renderer.clear();
