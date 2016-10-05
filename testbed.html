@@ -44,6 +44,7 @@
     <script id="fragment-shader-screen" type="x-shader/x-fragment">
         varying vec2 vUv;
         uniform sampler2D writingTex;
+        uniform vec2 iResolution;
         #define damping 0.99  
 
         void main() {
@@ -127,7 +128,10 @@
         var sceneScreen = new THREE.Scene();
         var materialScreen = new THREE.ShaderMaterial( {
 
-            uniforms: { writingTex: { value: tex2.texture } },
+            uniforms: { 
+                writingTex: { value: tex2.texture },
+                iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+            },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
             fragmentShader: document.getElementById( 'fragment-shader-screen' ).textContent,
 
