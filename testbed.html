@@ -31,6 +31,55 @@
         }
     </script>
 
+
+    <!-- no change vertex shader. used for all render stages. -->
+    <script id="vs_output" type="x-shader/x-vertex">
+
+        varying vec2 texCoord;
+
+        void main(void)
+        {
+            texCoord = uv;                              
+            gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+    </script>
+
+    <!-- feedback shader -->
+    <script id="fs_feedback" type="x-shader/x-fragment">        
+        // switch on high precision floats
+        #ifdef GL_ES
+        precision highp float;
+        #endif      
+        uniform sampler2D texture;
+        varying vec2 texCoord;
+        uniform float onOpen;
+
+        void main() 
+        {                       
+            // sample textures
+            vec4 result = texture2D(texture, texCoord);
+            result.rgb+=0.001;
+            // result.rgb = mod(result.rgb, 1.0);
+/*          if (onOpen <=1.0){
+                result.rgb=startT.rgb;
+            }*/
+            result.a = 1.0;                                 
+            gl_FragColor = result;              
+        }
+    </script>
+
+
+
+    <script id="fragment-shader-simple" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        uniform sampler2D writingTex;
+        #define damping 0.99  
+
+        void main() {
+            gl_FragColor = texture2D( writingTex, vUv );
+        }
+    </script>
+
     <script id="fragment-shader-screen" type="x-shader/x-fragment">
         varying vec2 vUv;
         uniform sampler2D writingTex;
@@ -44,9 +93,11 @@
             offset[3] = vec2(0.0,-1.0);
             float sum = 0.;
             for(int i = 0; i < 4; i++) {
-                sum += texture2D(writingTex, vUv + offset[i] / vec2(600,600)).r;
+                sum += texture2D(writingTex, vUv + offset[i]).r;
             }
+            vUv.x += 0.01;
             gl_FragColor = texture2D( writingTex, vUv );
+            // gl_FragColor = vec4(sum, 0., 0., 1.);
         }
     </script>
 
@@ -104,19 +155,61 @@
         camera.position.z = 300;
         // Separate camera for render to texture
         var cameraRTT = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
+
+        // Stealing =======
+        var loopRes = new THREE.Vector2(640.0, 480.0)
+        var sceneFeedback = new THREE.Scene();
+        // create buffers
+        var renderTargetNearestFloatParams = {
+            minFilter:THREE.NearestFilter,
+            magFilter:THREE.NearestFilter,
+            wrapS:THREE.ClampToEdgeWrapping,
+            wrapT:THREE.ClampToEdgeWrapping,
+            format:THREE.RGBAFormat,
+            stencilBuffer:false,
+            depthBuffer:false,
+            needsUpdate:true,
+            type:THREE.FloatType
+        };
+        var feedbackTexture = new THREE.WebGLRenderTarget( loopRes.x, loopRes.y, renderTargetNearestFloatParams );              
+        var feedbackTexture2 = new THREE.WebGLRenderTarget( loopRes.x, loopRes.y, renderTargetNearestFloatParams ); 
+        var cameraLoop = new THREE.OrthographicCamera( loopRes.x / - 2, loopRes.x / 2, loopRes.y / 2, loopRes.y / - 2, -10000, 10000 );
+
+        // Setup sceneOutput camera
+        var cameraOutput = new THREE.PerspectiveCamera( 60, window.innerWidth/window.innerHeight, 1, 10000 );
+        cameraOutput.position.z = 300;
+
+        // feedback shader
+        var feedbackUniforms = {
+            texture: { type: "t", value: feedbackTexture2 },
+            onOpen: { type: "f", value: 0.0 },
+        };
+        var feedbackMat = new THREE.ShaderMaterial({
+            uniforms: feedbackUniforms,
+            vertexShader: document.getElementById( 'vs_output' ).textContent,
+            fragmentShader: document.getElementById( 'fs_feedback' ).textContent
+        });             
+        var feedbackGeo = new THREE.PlaneBufferGeometry( loopRes.x, loopRes.y );
+        feedbackQuad = new THREE.Mesh( feedbackGeo, feedbackMat );
+        feedbackQuad.position.z = -100;
+        sceneFeedback.add( feedbackQuad );
+        // ============
+
+
+
         // Texture to render to
         var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
             stencilBuffer: false } );
         // For ping-ponging
         var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
             stencilBuffer: false } );
-        // Fullscreen quad scene
+        // Fullscreen quad writingScene
         var sceneScreen = new THREE.Scene();
         var materialScreen = new THREE.ShaderMaterial( {
 
-            uniforms: { writingTex: { value: tex1.texture } },
+            uniforms: { writingTex: { value: feedbackTexture2.texture } },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-screen' ).textContent,
+            fragmentShader: document.getElementById( 'fragment-shader-simple' ).textContent,
 
             depthWrite: false
 
@@ -126,13 +219,19 @@
         quad.position.z = -100;
         sceneScreen.add( quad );
 
-        var scene = new THREE.Scene();
+        var outputScene = new THREE.Scene();
+        var outputQuad = new THREE.Mesh( plane, materialScreen );
+        outputQuad.position.z = -100;
+        outputScene.add( outputQuad );
+
+        var writingScene = new THREE.Scene();
 
         var dpr = window.devicePixelRatio;
         var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
         renderer.setPixelRatio(dpr);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0xffffff);
+        // renderer.autoClear = false;
 
         var controls = new THREE.TrackballControls(camera, renderer.domElement);
         controls.minDistance = 1;
@@ -141,7 +240,7 @@
         var mesh;
         var controller = {
             degrees: 60,
-            lineWidth: 5,
+            lineWidth: 2.5,
             color: "#000ff0",
             wireframe: false,
             rttz: camera.position.z,
@@ -149,7 +248,7 @@
             restart: function() {
                 if (mesh) {
                     // TODO: dispose
-                    scene.remove(mesh);
+                    writingScene.remove(mesh);
                 }
                 mesh = new ChiselTipMesh({
                     strokeData: TestStrokes[3].strokeData,
@@ -159,7 +258,7 @@
                 });
                 mesh.geometry.center();
                 mesh.material.wireframe = controller.wireframe;
-                scene.add(mesh);
+                writingScene.add(mesh);
                 mesh.start();
 
                 var bbox = new THREE.Box3().setFromObject(mesh);
@@ -184,20 +283,36 @@
             controls.update();
             // camera.position.z =controller.rttz;
             stats.update();
+            // renderer.clear();
 
-            // Render whole scene into texture
-            // this.render = function ( scene, camera, renderTarget, forceClear ) {
-            renderer.render( scene, cameraRTT, tex1 );
+            // Render whole writingScene into texture
+            // this.render = function ( writingScene, camera, renderTarget, forceClear ) {
+            if ( mesh.isAnimating() ) 
+            {
+                renderer.render( writingScene, cameraRTT, feedbackTexture2 );
+            }
+            else 
+            {
+                renderer.render( sceneFeedback, cameraLoop, feedbackTexture);
 
-            // Ping pong!
-            var a = tex2;
-            tex2 = tex1;
-            tex1 = a;
-            materialScreen.uniforms.writingTex.value = tex2.texture;
-            
-            renderer.render( sceneScreen, camera);
-            // renderer.render( scene, camera );
-            // renderer.render( scene, cameraRTT );
+                var a = feedbackTexture2;
+                feedbackTexture2 = feedbackTexture;
+                feedbackTexture = a;
+                feedbackUniforms.texture.value = feedbackTexture2.texture;
+                // renderer.render( sceneScreen, cameraRTT, tex1 );
+                //  // Ping pong!
+                // var a = tex2;
+                // tex2 = tex1;
+                // tex1 = a;
+                // materialScreen.uniforms.writingTex.value = tex2.texture;
+                // materialScreen.fragmentShader = document.getElementById( 'fragment-shader-simple' ).textContent;
+                // outputQuad.material.uniforms.writingTex.value = feedbackTexture2.texture;
+            }
+
+            renderer.render( outputScene, camera);
+
+            // renderer.render( writingScene, camera );
+            // renderer.render( writingScene, cameraRTT );
         }
         render();
     </script>
