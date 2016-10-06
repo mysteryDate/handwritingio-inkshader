@@ -1,0 +1,250 @@
+<html>
+<head>
+    <!-- Copyright 2016 Gracious Eloise, Inc. All rights reserved. -->
+
+    <script src="stats.min.js"></script>
+    <script src="dat.gui.js"></script>
+
+    <script src="three.r78.js"></script>
+    <script src="TrackballControls.js"></script>
+
+    <script src="ChiselTipGeometry.js"></script>
+    <script src="ChiselTipMesh.js"></script>
+
+    <script src="TestStrokes.js"></script>
+    <style>
+        body {
+            background: #f0f0f0;
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+
+
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+    </script>
+
+    <script id="fragment-shader-simple" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        uniform sampler2D _mainTex;
+
+        void main() {
+            gl_FragColor = texture2D( _mainTex, vUv );
+        }
+    </script>
+
+    <script id="fragment-shader-pingpong" type="x-shader/x-fragment">
+        uniform sampler2D _mainTex;
+        uniform sampler2D _backBuffer;
+        uniform vec2 _iResolution;
+        uniform float _damping;
+        uniform vec3 _color;
+        varying vec2 vUv;
+
+        uniform vec2 _hiPoint;
+        uniform float _mouseDown;
+
+        vec2 offset[4];
+
+        void main() {
+
+            offset[0] = vec2(-1.0,0.0);
+            offset[1] = vec2(1.0,0.0);
+            offset[2] = vec2(0.0,1.0);
+            offset[3] = vec2(0.0,-1.0);
+
+            vec3 sum = vec3(0.,0.,0.);
+            for(int i = 0; i < 4; i++) {
+                sum += texture2D(_mainTex, vUv + offset[i] / _iResolution.xy).rgb;
+            }
+            sum = (sum / 2.0) - texture2D(_backBuffer, vUv).rgb;
+            sum *= _damping;
+
+            float dist = 0.;
+            if(_mouseDown > 0.5) 
+            {
+                dist = smoothstep(20.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+            }
+
+            gl_FragColor = vec4(sum, 1.);
+            gl_FragColor = vec4(sum + dist * _color, 1.);
+        }
+    </script>
+
+    <script>
+        // Global stuff
+        var canvas = document.createElement('canvas');
+        document.body.appendChild(canvas);
+        var stats = new Stats();
+        document.body.appendChild(stats.domElement);
+        var gui = new dat.GUI();
+        var dpr = window.devicePixelRatio;
+        var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
+        renderer.setPixelRatio(dpr);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        // --------
+
+        // Cameras
+        var camera = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
+        // Separate camera for render to texture
+        var cameraRTT = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
+        // --------
+
+        // Textures
+        var textureOptions = {
+            inFilter: THREE.LinearFilter,
+            magFilter: THREE.NearestFilter,
+            format: THREE.RGBFormat,
+            depthBuffer: false,
+            stencilBuffer: false
+        }
+        // Texture to render to
+        var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        // For ping-ponging
+        var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        // Because webGL complains when you sample from and write to the same texture
+        var dummyTex = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        // --------
+
+        // Fullscreen quad for ping-ponging
+        var pingpongScene = new THREE.Scene();
+        var pingpongMaterial = new THREE.ShaderMaterial( {
+            uniforms: { 
+                _mainTex: { value: tex2.texture },
+                _backBuffer: { value: dummyTex.texture },
+                _iResolution: { value: new THREE.Vector2(window.innerWidth,window.innerHeight)},
+                _damping: {value: 0.99},
+                _hiPoint: {value: new THREE.Vector2(0.,0.)},
+                _mouseDown: {value: 0.},
+                _color: {value: new THREE.Color('#ffffff')}
+            },
+            vertexShader: document.getElementById( 'vertex-shader' ).textContent,
+            fragmentShader: document.getElementById( 'fragment-shader-pingpong' ).textContent,
+
+            depthWrite: false
+
+        } );
+        var plane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
+        var quad = new THREE.Mesh( plane, pingpongMaterial );
+        quad.position.z = -100;
+        pingpongScene.add( quad );
+        // --------
+
+        // Basic output scene
+        var outputScene = new THREE.Scene();
+        var basicMaterial = new THREE.ShaderMaterial( {
+            uniforms: {
+                _mainTex: {value: tex2.texture}
+            },
+            vertexShader: document.getElementById('vertex-shader').textContent,
+            fragmentShader: document.getElementById('fragment-shader-simple').textContent
+        })
+        var outputQuad = new THREE.Mesh( plane, basicMaterial );
+        outputQuad.position.z = -100;
+        outputScene.add( outputQuad );
+        // --------
+
+        // Just for the writing mesh
+        var writingScene = new THREE.Scene();
+        // --------
+
+        // Controller
+        var mesh, boundingBox;
+        var controller = {
+            degrees: 60,
+            lineWidth: 2.5,
+            color: "#000ff0",
+            wireframe: false,
+            damping: 0.,
+
+            restart: function() {
+                if (mesh) {
+                    // TODO: dispose
+                    writingScene.remove(mesh);
+                }
+                mesh = new ChiselTipMesh({
+                    strokeData: TestStrokes[3].strokeData,
+                    degrees: controller.degrees,
+                    lineWidth: controller.lineWidth,
+                    color: new THREE.Color(controller.color),
+                });
+                mesh.geometry.center();
+                mesh.material.wireframe = controller.wireframe;
+                writingScene.add(mesh);
+                mesh.start();
+
+                boundingBox = new THREE.Box3().setFromObject(mesh);
+                var aspect = window.innerWidth / window.innerHeight;
+                var newWidth = boundingBox.max.x - boundingBox.min.x;
+                var newHeight = newWidth/aspect;
+                cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
+                plane = new THREE.PlaneBufferGeometry( newWidth, newHeight );
+                pingpongScene.remove(quad);
+                quad = new THREE.Mesh( plane, pingpongMaterial );
+                quad.position.z = -100;
+                pingpongScene.add( quad );
+                basicMaterial.uniforms._mainTex.value = tex2.texture;
+                pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
+            }
+        }
+        controller.restart();
+
+        gui.add(controller, "degrees", 0, 359).onChange(controller.restart);
+        gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
+        gui.addColor(controller, "color").onChange(controller.restart);
+        gui.add(controller, "wireframe").onChange(controller.restart);
+        gui.add(controller,"damping",-1.,10.).listen();
+        gui.add(controller, "restart");
+        // --------
+
+        function render() {
+            requestAnimationFrame(render);
+            stats.update();
+
+            pingpongMaterial.uniforms._damping.value = 1 - controller.damping/100.;
+
+            if ( mesh.isAnimating() ) 
+            {
+                renderer.render( writingScene, cameraRTT, tex2 );
+            }
+            else 
+            {
+                renderer.render( pingpongScene, cameraRTT, tex1 );
+                // Ping pong the textures
+                var a = tex2;
+                tex2 = tex1;
+                tex1 = a;
+
+                // Set the proper values, tex2 + dummyTex (copy of tex1) --> writes to tex1
+                pingpongMaterial.uniforms._mainTex.value = tex2.texture;
+                pingpongMaterial.uniforms._backBuffer.value = dummyTex.texture;
+
+                // Copy tex1 to dummytex
+                basicMaterial.uniforms._mainTex.value = tex1.texture;
+                renderer.render( outputScene, camera, dummyTex);
+            }
+
+            renderer.render( outputScene, camera);
+        }
+
+        canvas.onmousedown = function(e) {
+            pingpongMaterial.uniforms._mouseDown.value = 1.0;
+        }
+        canvas.onmousemove = function(e) {
+            pingpongMaterial.uniforms._hiPoint.value = new THREE.Vector2(
+                e.clientX, window.innerHeight - e.clientY
+            );
+        }
+        canvas.onmouseup = function(e) {
+            pingpongMaterial.uniforms._mouseDown.value = 0.0;
+        }
+        render();
+    </script>
+</body>
