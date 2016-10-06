@@ -73,8 +73,7 @@
                 dist = smoothstep(20.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
             }
 
-            gl_FragColor = vec4(sum, 1.);
-            gl_FragColor = vec4(sum + dist * _color, 1.);
+            gl_FragColor = vec4(sum - dist * (vec3(1.,1.,1.) - _color), 1.);
         }
     </script>
 
@@ -89,6 +88,7 @@
         var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
         renderer.setPixelRatio(dpr);
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0xffffff);
         // --------
 
         // Cameras
@@ -111,9 +111,6 @@
         var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
         // Because webGL complains when you sample from and write to the same texture
         var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
-        renderer.clearTarget(outputTex, 0xffffff);
-        renderer.clearTarget(tex1, 0xffffff);
-        renderer.clearTarget(tex2, 0xffffff);
         // --------
 
         // Fullscreen quad for ping-ponging
@@ -162,10 +159,10 @@
         var mesh, boundingBox;
         var controller = {
             degrees: 60,
-            lineWidth: 2.5,
+            lineWidth: 5,
             color: "#000ff0",
             wireframe: false,
-            damping: 0.,
+            damping: 0.3,
 
             restart: function() {
                 if (mesh) {
@@ -193,14 +190,13 @@
                 quad = new THREE.Mesh( plane, pingpongMaterial );
                 quad.position.z = -100;
                 pingpongScene.add( quad );
-                pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
             }
         }
         controller.restart();
 
         gui.add(controller, "degrees", 0, 359).onChange(controller.restart);
         gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
-        gui.addColor(controller, "color").onChange(controller.restart);
+        gui.addColor(controller, "color").listen();
         gui.add(controller, "wireframe").onChange(controller.restart);
         gui.add(controller,"damping",-1.,10.).listen();
         gui.add(controller, "restart");
@@ -210,7 +206,7 @@
             requestAnimationFrame(render);
             stats.update();
 
-            pingpongMaterial.uniforms._damping.value = 1 - controller.damping/100.;
+            pingpongMaterial.uniforms._damping.value = 1 + controller.damping/1000.;
 
             if ( mesh.isAnimating() ) 
             {
@@ -218,6 +214,7 @@
             }
             else 
             {
+                pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
                 renderer.render( pingpongScene, cameraRTT, outputTex );
                 // Ping pong the textures
                 var a = tex1;
