@@ -106,19 +106,22 @@
             stencilBuffer: false
         }
         // Texture to render to
-        var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        var outputTex = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
         // For ping-ponging
-        var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
         // Because webGL complains when you sample from and write to the same texture
-        var dummyTex = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        renderer.clearTarget(outputTex, 0xffffff);
+        renderer.clearTarget(tex1, 0xffffff);
+        renderer.clearTarget(tex2, 0xffffff);
         // --------
 
         // Fullscreen quad for ping-ponging
         var pingpongScene = new THREE.Scene();
         var pingpongMaterial = new THREE.ShaderMaterial( {
             uniforms: { 
-                _mainTex: { value: tex2.texture },
-                _backBuffer: { value: dummyTex.texture },
+                _mainTex: { value: tex1.texture },
+                _backBuffer: { value: tex2.texture },
                 _iResolution: { value: new THREE.Vector2(window.innerWidth,window.innerHeight)},
                 _damping: {value: 0.99},
                 _hiPoint: {value: new THREE.Vector2(0.,0.)},
@@ -141,7 +144,7 @@
         var outputScene = new THREE.Scene();
         var basicMaterial = new THREE.ShaderMaterial( {
             uniforms: {
-                _mainTex: {value: tex2.texture}
+                _mainTex: {value: tex1.texture}
             },
             vertexShader: document.getElementById('vertex-shader').textContent,
             fragmentShader: document.getElementById('fragment-shader-simple').textContent
@@ -190,7 +193,6 @@
                 quad = new THREE.Mesh( plane, pingpongMaterial );
                 quad.position.z = -100;
                 pingpongScene.add( quad );
-                // basicMaterial.uniforms._mainTex.value = tex2.texture;
                 pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
             }
         }
@@ -212,28 +214,26 @@
 
             if ( mesh.isAnimating() ) 
             {
-                renderer.render( writingScene, cameraRTT, tex2 );
+                renderer.render( writingScene, cameraRTT, tex1 );
             }
             else 
             {
-                renderer.render( pingpongScene, cameraRTT, tex1 );
+                renderer.render( pingpongScene, cameraRTT, outputTex );
                 // Ping pong the textures
-                var a = tex2;
-                tex2 = tex1;
-                // tex1 = a;
-                tex1 = dummyTex;
-                dummyTex = a;
+                var a = tex1;
+                tex1 = outputTex;
+                outputTex = tex2;
+                tex2 = a;
 
-                // Set the proper values, tex2 + dummyTex (copy of tex1) --> writes to tex1
-                pingpongMaterial.uniforms._mainTex.value = tex2.texture;
-                pingpongMaterial.uniforms._backBuffer.value = dummyTex.texture;
+                // Set the proper values, tex1 + tex2 (copy of outputTex) --> writes to outputTex
+                pingpongMaterial.uniforms._mainTex.value = tex1.texture;
+                pingpongMaterial.uniforms._backBuffer.value = tex2.texture;
 
-                // Copy tex1 to dummytex
-                basicMaterial.uniforms._mainTex.value = tex2.texture;
-                // renderer.render( outputScene, camera, dummyTex);
+                // Make sure the main camera is using the right texture
+                basicMaterial.uniforms._mainTex.value = tex1.texture;
             }
 
-            renderer.render( outputScene, camera);
+            renderer.render( outputScene, camera );
         }
 
         canvas.onmousedown = function(e) {
