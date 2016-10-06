@@ -64,7 +64,7 @@ ChiselTipMesh = function(options) {
 
     this.isAnimating = function() {
         var timeSeconds = Date.now()/1000;
-        if (timeSeconds - startTimeSeconds < duration) 
+        if (timeSeconds - startTimeSeconds <= duration) 
         {
             return true;
         }
