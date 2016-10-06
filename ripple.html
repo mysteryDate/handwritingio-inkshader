@@ -190,7 +190,7 @@
                 quad = new THREE.Mesh( plane, pingpongMaterial );
                 quad.position.z = -100;
                 pingpongScene.add( quad );
-                basicMaterial.uniforms._mainTex.value = tex2.texture;
+                // basicMaterial.uniforms._mainTex.value = tex2.texture;
                 pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
             }
         }
@@ -220,15 +220,17 @@
                 // Ping pong the textures
                 var a = tex2;
                 tex2 = tex1;
-                tex1 = a;
+                // tex1 = a;
+                tex1 = dummyTex;
+                dummyTex = a;
 
                 // Set the proper values, tex2 + dummyTex (copy of tex1) --> writes to tex1
                 pingpongMaterial.uniforms._mainTex.value = tex2.texture;
                 pingpongMaterial.uniforms._backBuffer.value = dummyTex.texture;
 
                 // Copy tex1 to dummytex
-                basicMaterial.uniforms._mainTex.value = tex1.texture;
-                renderer.render( outputScene, camera, dummyTex);
+                basicMaterial.uniforms._mainTex.value = tex2.texture;
+                // renderer.render( outputScene, camera, dummyTex);
             }
 
             renderer.render( outputScene, camera);
