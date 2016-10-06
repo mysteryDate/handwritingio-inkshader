@@ -33,108 +33,87 @@
 
     <script id="fragment-shader-simple" type="x-shader/x-fragment">
         varying vec2 vUv;
-        uniform sampler2D writingTex;
-        #define damping 0.99  
+        uniform sampler2D _mainTex;
 
         void main() {
-            gl_FragColor = texture2D( writingTex, vUv );
+            gl_FragColor = texture2D( _mainTex, vUv );
         }
     </script>
 
-    <script id="fragment-shader-screen" type="x-shader/x-fragment">
+    <script id="fragment-shader-pingpong" type="x-shader/x-fragment">
+        uniform sampler2D _mainTex;
+        uniform sampler2D _backBuffer;
+        uniform vec2 _iResolution;
+        uniform float _damping;
         varying vec2 vUv;
-        uniform sampler2D writingTex;
-        uniform vec2 iResolution;
-        uniform float fadeSpeed;  
 
-        void main() {
-            vec2 offset[4];
-            offset[0] = vec2(-1.0,0.0);
-            offset[1] = vec2(1.0,0.0);
-            offset[2] = vec2(0.0,1.0);
-            offset[3] = vec2(0.0,-1.0);
-            // float sum = 0.;
-            vec4 sum = vec4(0.,0.,0.,0.);
-            for(int i = 0; i < 4; i++) {
-                sum += texture2D(writingTex, vUv + offset[i]/iResolution.xy);
-            }
-            // vUv.x += 0.01;
-            vec4 originalColor = texture2D( writingTex, vUv );
-            gl_FragColor = sum*(1.-fadeSpeed) + originalColor*fadeSpeed;
-        }
-    </script>
-
-    <script id="fragment-shader-ripples" type="x-shader/x-fragment">
-        varying vec2 vUv;
-        uniform sampler2D writingTex;
-
-        #define damping 0.99  
         vec2 offset[4];
 
-        bool reset() {
-            return texture2D(iChannel3, vec2(32.5/256.0, 0.5) ).x > 0.5;  
-        }
-            
-        void mainImage( out vec4 fragColor, in vec2 fragCoord )
-        { 
-            float dMouse = 0.0; 
-            vec2 uv = fragCoord.xy / iResolution.xy;
-            
+        void main() {
+
             offset[0] = vec2(-1.0,0.0);
             offset[1] = vec2(1.0,0.0);
             offset[2] = vec2(0.0,1.0);
             offset[3] = vec2(0.0,-1.0);
-            float sum = 0.;
+
+            vec3 sum = vec3(0.,0.,0.);
             for(int i = 0; i < 4; i++) {
-                sum += texture2D(iChannel0, uv + offset[i] / iResolution.xy).r;
+                sum += texture2D(_mainTex, vUv + offset[i] / _iResolution.xy).rgb;
             }
-            //sum = (sum / 2.0) - texture2D(iChannel1, uv).rgb;
-            sum = (sum - 2.0) - (texture2D(iChannel1, uv).r - 0.5) * 2.;
-            sum *= damping;
-            sum = sum/2.0 + 0.5;
-            
-            if(iMouse.z > 0.0) {
-                dMouse = smoothstep(4.5,.5,length(iMouse.xy - fragCoord.xy));
-            }    
-            if(reset()){
-                fragColor = vec4(0.5,0.5,0.5,1.0);
-            }
-            else {
-                fragColor = vec4(vec3(1.0,1.0,1.0) * (dMouse + sum),1.0);
-            }
-        }    
+            sum = (sum / 2.0) - texture2D(_backBuffer, vUv).rgb;
+            sum *= _damping;
+
+            gl_FragColor = vec4(sum, 1.);
+        }
     </script>
 
     <script>
-        var loopRes = new THREE.Vector2(64.0, 64.0)
+        // Global stuff
         var canvas = document.createElement('canvas');
         document.body.appendChild(canvas);
-
         var stats = new Stats();
         document.body.appendChild(stats.domElement);
-
         var gui = new dat.GUI();
+        var dpr = window.devicePixelRatio;
+        var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
+        renderer.setPixelRatio(dpr);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0xffffff);
+        // --------
 
+        // Cameras
         var camera = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
         // Separate camera for render to texture
         var cameraRTT = new THREE.OrthographicCamera( window.innerWidth / - 2, window.innerWidth / 2, window.innerHeight / 2, window.innerHeight / - 2, -10000, 10000 );
-        // Texture to render to
-        var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
-            stencilBuffer: false } );
-        // For ping-ponging
-        var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
-            stencilBuffer: false } );
-        // Fullscreen quad writingScene
-        var sceneScreen = new THREE.Scene();
-        var materialScreen = new THREE.ShaderMaterial( {
+        // --------
 
+        // Textures
+        var textureOptions = {
+            inFilter: THREE.LinearFilter,
+            magFilter: THREE.NearestFilter,
+            format: THREE.RGBFormat,
+            depthBuffer: false,
+            stencilBuffer: false
+        }
+        // Texture to render to
+        var tex1 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        // For ping-ponging
+        var tex2 = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        // Because webGL complains when you sample from and write to the same texture
+        var dummyTex = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, textureOptions );
+        // --------
+
+        // Fullscreen quad for ping-ponging
+        var pingpongScene = new THREE.Scene();
+        var materialScreen = new THREE.ShaderMaterial( {
             uniforms: { 
-                writingTex: { value: tex2.texture },
-                iResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight)},
-                fadeSpeed: {value: 0.5 }
+                _mainTex: { value: tex1.texture },
+                _backBuffer: { value: dummyTex.texture },
+                _iResolution: { value: new THREE.Vector2(window.innerWidth,window.innerHeight)},
+                _damping: {value: 0.99},
             },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-screen' ).textContent,
+            fragmentShader: document.getElementById( 'fragment-shader-pingpong' ).textContent,
 
             depthWrite: false
 
@@ -142,26 +121,28 @@
         var plane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
         var quad = new THREE.Mesh( plane, materialScreen );
         quad.position.z = -100;
-        sceneScreen.add( quad );
+        pingpongScene.add( quad );
+        // --------
 
+        // Basic output scene
         var outputScene = new THREE.Scene();
-        var outputQuad = new THREE.Mesh( plane, materialScreen );
+        var basicMaterial = new THREE.ShaderMaterial( {
+            uniforms: {
+                _mainTex: {value: tex1.texture}
+            },
+            vertexShader: document.getElementById('vertex-shader').textContent,
+            fragmentShader: document.getElementById('fragment-shader-simple').textContent
+        })
+        var outputQuad = new THREE.Mesh( plane, basicMaterial );
         outputQuad.position.z = -100;
         outputScene.add( outputQuad );
+        // --------
 
+        // Just for the writing mesh
         var writingScene = new THREE.Scene();
+        // --------
 
-        var dpr = window.devicePixelRatio;
-        var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
-        renderer.setPixelRatio(dpr);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0xffffff);
-        // renderer.autoClear = false;
-
-        var controls = new THREE.TrackballControls(camera, renderer.domElement);
-        controls.minDistance = 1;
-        controls.maxDistance = 1000;
-
+        // Controller
         var mesh, boundingBox;
         var controller = {
             degrees: 60,
@@ -192,17 +173,10 @@
                 var newHeight = newWidth/aspect;
                 cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
                 plane = new THREE.PlaneBufferGeometry( newWidth, newHeight );
-                sceneScreen.remove(quad);
+                pingpongScene.remove(quad);
                 quad = new THREE.Mesh( plane, materialScreen );
                 quad.position.z = -100;
-                sceneScreen.add( quad );
-
-                // // Texture to render to
-                // tex1 = new THREE.WebGLRenderTarget( bbox.max.x - bbox.min.x, (bbox.max.x - bbox.min.x) / aspect, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
-                //     stencilBuffer: false } );
-                // // For ping-ponging
-                // tex2 = new THREE.WebGLRenderTarget( bbox.max.x - bbox.min.x, (bbox.max.x - bbox.min.x) / aspect, { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter, format: THREE.RGBFormat, depthBuffer: false,
-                //     stencilBuffer: false } );
+                pingpongScene.add( quad );
             }
         }
         controller.restart();
@@ -212,40 +186,29 @@
         gui.addColor(controller, "color").onChange(controller.restart);
         gui.add(controller, "wireframe").onChange(controller.restart);
         gui.add(controller,"fadeSpeed",0,1).listen();
-
         gui.add(controller, "restart");
-
-        
+        // --------
 
         function render() {
             requestAnimationFrame(render);
-            controls.update();
-            materialScreen.uniforms.fadeSpeed.value = -0.05*controller.fadeSpeed + 1;
-            // camera.position.z =controller.rttz;
             stats.update();
-            // renderer.clear();
 
-            // Render whole writingScene into texture
-            // this.render = function ( writingScene, camera, renderTarget, forceClear ) {
             if ( mesh.isAnimating() ) 
             {
-                renderer.render( writingScene, cameraRTT, tex2 );
+                renderer.render( writingScene, cameraRTT, tex1 );
             }
-            else 
-            {
-                renderer.render( sceneScreen, cameraRTT, tex1 );
-                 // Ping pong!
-                var a = tex2;
-                tex2 = tex1;
-                tex1 = a;
-                materialScreen.uniforms.writingTex.value = tex2.texture;
-            }
+            // else 
+            // {
+            //     renderer.render( pingpongScene, cameraRTT, tex1 );
+            //      // Ping pong!
+            //     var a = tex2;
+            //     tex2 = tex1;
+            //     tex1 = a;
+            //     materialScreen.uniforms._mainTex.value = tex2.texture;
+            // }
 
             renderer.render( outputScene, camera);
-
-            // renderer.render( writingScene, camera );
-            // renderer.render( writingScene, cameraRTT );
-        }
+       }
         render();
     </script>
 </body>
