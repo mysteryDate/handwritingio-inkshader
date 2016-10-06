@@ -162,7 +162,7 @@
             lineWidth: 5,
             color: "#000ff0",
             wireframe: false,
-            damping: 0.3,
+            damping: 0.35,
 
             restart: function() {
                 if (mesh) {
@@ -198,7 +198,7 @@
         gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
         gui.addColor(controller, "color").listen();
         gui.add(controller, "wireframe").onChange(controller.restart);
-        gui.add(controller,"damping",-1.,10.).listen();
+        gui.add(controller,"damping",-0.1,1.).listen();
         gui.add(controller, "restart");
         // --------
 
