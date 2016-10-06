@@ -45,6 +45,7 @@
         uniform sampler2D _backBuffer;
         uniform vec2 _iResolution;
         uniform float _damping;
+        uniform vec3 _color;
         varying vec2 vUv;
 
         uniform vec2 _hiPoint;
@@ -69,11 +70,11 @@
             float dist = 0.;
             if(_mouseDown > 0.5) 
             {
-                dist = smoothstep(4.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+                dist = smoothstep(20.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
             }
 
             gl_FragColor = vec4(sum, 1.);
-            gl_FragColor = vec4(sum + dist * vec3(1.,1.,1.), 1.);
+            gl_FragColor = vec4(sum + dist * _color, 1.);
         }
     </script>
 
@@ -121,7 +122,8 @@
                 _iResolution: { value: new THREE.Vector2(window.innerWidth,window.innerHeight)},
                 _damping: {value: 0.99},
                 _hiPoint: {value: new THREE.Vector2(0.,0.)},
-                _mouseDown: {value: 0.}
+                _mouseDown: {value: 0.},
+                _color: {value: new THREE.Color('#ffffff')}
             },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
             fragmentShader: document.getElementById( 'fragment-shader-pingpong' ).textContent,
@@ -139,7 +141,7 @@
         var outputScene = new THREE.Scene();
         var basicMaterial = new THREE.ShaderMaterial( {
             uniforms: {
-                _mainTex: {value: tex1.texture}
+                _mainTex: {value: tex2.texture}
             },
             vertexShader: document.getElementById('vertex-shader').textContent,
             fragmentShader: document.getElementById('fragment-shader-simple').textContent
@@ -188,6 +190,8 @@
                 quad = new THREE.Mesh( plane, pingpongMaterial );
                 quad.position.z = -100;
                 pingpongScene.add( quad );
+                basicMaterial.uniforms._mainTex.value = tex2.texture;
+                pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
             }
         }
         controller.restart();
