@@ -72,17 +72,19 @@
                 sum += texture2D(_mainTex, vUv + offset[i] / _iResolution.xy).rgb;
             }
             sum = (sum / 2.0) - texture2D(_backBuffer, vUv).rgb;
+            // sum *= 0.25;
             sum *= _damping;
             vec3 currentColor = texture2D(_mainTex, vUv).rgb;
 
             float dist = 0.;
             if(_mouseDown > 0.5) 
             {
-                dist = smoothstep(20.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+                dist = smoothstep(_floats.z,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _floats.z * 20.;
             }
-            float paperMix = pow(_mix * texture2D(_paperTex, vUv).r, 1.) * 1.;
+            float paperMix = pow(_mix * texture2D(_paperTex, vUv).r, _floats.x) * _floats.y;
 
             gl_FragColor =vec4((1.-paperMix)*currentColor + paperMix*sum - dist * (vec3(1.,1.,1.) - _color), 1.);
+            // gl_FragColor =vec4((1.-paperMix)*currentColor + paperMix*sum + dist * _color, 1.);
         }
     </script>
 
@@ -134,7 +136,8 @@
                 _hiPoint: {value: new THREE.Vector2(0.,0.)},
                 _mouseDown: {value: 0.},
                 _color: {value: new THREE.Color('#ffffff')},
-                _mix: {value: 1.}
+                _mix: {value: 1.},
+                _floats: {value: new THREE.Vector4(1.,1.,1.,1.)}
             },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
             fragmentShader: document.getElementById( 'fragment-shader-pingpong' ).textContent,
@@ -176,6 +179,10 @@
             wireframe: false,
             damping: 0.3,
             mix: 1.,
+            floatsx: 1.,
+            floatsy: 1.,
+            floatsz: 50.,
+            floatsw: 1.,
 
             restart: function() {
                 if (mesh) {
@@ -203,6 +210,11 @@
                 quad = new THREE.Mesh( plane, pingpongMaterial );
                 quad.position.z = -100;
                 pingpongScene.add( quad );
+            },
+
+            clear: function() {
+                writingScene.remove(mesh);
+                mesh.start();
             }
         }
         controller.restart();
@@ -211,9 +223,14 @@
         gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
         gui.addColor(controller, "color").listen();
         gui.add(controller, "wireframe").onChange(controller.restart);
-        gui.add(controller,"damping",-10.,10.).listen();
+        gui.add(controller,"damping",-100.,100.).listen();
         gui.add(controller,"mix",0.,1.).listen();
+        gui.add(controller,"floatsx").listen();
+        gui.add(controller,"floatsy").listen();
+        gui.add(controller,"floatsz").listen();
+        gui.add(controller,"floatsw").listen();
         gui.add(controller, "restart");
+        gui.add(controller, "clear");
         // --------
 
         function render() {
@@ -223,6 +240,7 @@
 
             pingpongMaterial.uniforms._damping.value = 1 + controller.damping/1000.;
             pingpongMaterial.uniforms._mix.value = controller.mix;
+            pingpongMaterial.uniforms._floats.value = new THREE.Vector4(controller.floatsx, controller.floatsy, controller.floatsz, controller.floatsw);
 
             if ( mesh.isAnimating() ) 
             {
@@ -263,16 +281,11 @@
 
         // For our paper
         var loader = new THREE.TextureLoader();
-        loader.load('paper-tex.png', function ( paperTex ) {
+        loader.load('cracked-mud.png', function ( paperTex ) {
             basicMaterial.uniforms._paperTex.value = paperTex;
             pingpongMaterial.uniforms._paperTex.value = paperTex;
             controller.restart();
             render();
-            // render();
-            // var geometry = new THREE.SphereGeometry(1000, 20, 20);
-            // var material = new THREE.MeshBasicMaterial({map: paperTex, overdraw: 0.5});
-            // var mesh = new THREE.Mesh(geometry, material);
-            // scene.add(mesh);
         });
     </script>
 </body>
