@@ -34,8 +34,10 @@
     <script id="fragment-shader-simple" type="x-shader/x-fragment">
         varying vec2 vUv;
         uniform sampler2D _mainTex;
+        uniform sampler2D _paperTex;
 
         void main() {
+            // gl_FragColor = texture2D( _paperTex, vUv) + texture2D( _mainTex, vUv );
             gl_FragColor = texture2D( _mainTex, vUv );
         }
     </script>
@@ -48,8 +50,13 @@
         uniform vec3 _color;
         varying vec2 vUv;
 
+        uniform float _mix;
+        uniform sampler2D _paperTex;
+
         uniform vec2 _hiPoint;
         uniform float _mouseDown;
+
+        uniform vec4 _floats;
 
         vec2 offset[4];
 
@@ -66,14 +73,16 @@
             }
             sum = (sum / 2.0) - texture2D(_backBuffer, vUv).rgb;
             sum *= _damping;
+            vec3 currentColor = texture2D(_mainTex, vUv).rgb;
 
             float dist = 0.;
             if(_mouseDown > 0.5) 
             {
                 dist = smoothstep(20.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
             }
+            float paperMix = pow(_mix * texture2D(_paperTex, vUv).r, 1.) * 1.;
 
-            gl_FragColor = vec4(sum - dist * (vec3(1.,1.,1.) - _color), 1.);
+            gl_FragColor =vec4((1.-paperMix)*currentColor + paperMix*sum - dist * (vec3(1.,1.,1.) - _color), 1.);
         }
     </script>
 
@@ -119,11 +128,13 @@
             uniforms: { 
                 _mainTex: { value: tex1.texture },
                 _backBuffer: { value: tex2.texture },
+                _paperTex: { value: tex1.texture },
                 _iResolution: { value: new THREE.Vector2(window.innerWidth,window.innerHeight)},
                 _damping: {value: 0.99},
                 _hiPoint: {value: new THREE.Vector2(0.,0.)},
                 _mouseDown: {value: 0.},
-                _color: {value: new THREE.Color('#ffffff')}
+                _color: {value: new THREE.Color('#ffffff')},
+                _mix: {value: 1.}
             },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
             fragmentShader: document.getElementById( 'fragment-shader-pingpong' ).textContent,
@@ -141,7 +152,8 @@
         var outputScene = new THREE.Scene();
         var basicMaterial = new THREE.ShaderMaterial( {
             uniforms: {
-                _mainTex: {value: tex1.texture}
+                _mainTex: {value: tex1.texture},
+                _paperTex: {value: tex2.texture}
             },
             vertexShader: document.getElementById('vertex-shader').textContent,
             fragmentShader: document.getElementById('fragment-shader-simple').textContent
@@ -163,6 +175,7 @@
             color: "#000ff0",
             wireframe: false,
             damping: 0.3,
+            mix: 1.,
 
             restart: function() {
                 if (mesh) {
@@ -198,15 +211,18 @@
         gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
         gui.addColor(controller, "color").listen();
         gui.add(controller, "wireframe").onChange(controller.restart);
-        gui.add(controller,"damping",-1.,10.).listen();
+        gui.add(controller,"damping",-10.,10.).listen();
+        gui.add(controller,"mix",0.,1.).listen();
         gui.add(controller, "restart");
         // --------
 
         function render() {
             requestAnimationFrame(render);
+            // renderer.clear();
             stats.update();
 
             pingpongMaterial.uniforms._damping.value = 1 + controller.damping/1000.;
+            pingpongMaterial.uniforms._mix.value = controller.mix;
 
             if ( mesh.isAnimating() ) 
             {
@@ -244,6 +260,19 @@
         canvas.onmouseup = function(e) {
             pingpongMaterial.uniforms._mouseDown.value = 0.0;
         }
-        render();
+
+        // For our paper
+        var loader = new THREE.TextureLoader();
+        loader.load('paper-tex.png', function ( paperTex ) {
+            basicMaterial.uniforms._paperTex.value = paperTex;
+            pingpongMaterial.uniforms._paperTex.value = paperTex;
+            controller.restart();
+            render();
+            // render();
+            // var geometry = new THREE.SphereGeometry(1000, 20, 20);
+            // var material = new THREE.MeshBasicMaterial({map: paperTex, overdraw: 0.5});
+            // var mesh = new THREE.Mesh(geometry, material);
+            // scene.add(mesh);
+        });
     </script>
 </body>
