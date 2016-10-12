@@ -42,6 +42,126 @@
         }
     </script>
 
+    <script id="fragment-shader-copy-texture" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        uniform sampler2D _mainTex;
+
+        void main() {
+            // gl_FragColor = vec4(texture2D( _mainTex, vUv ).r,0.,0.,0.);
+            gl_FragColor = vec4(0.,0.,0.,0.);
+            if(vUv.x < 0.6 && vUv.y < 0.6 && vUv.x > 0.4 && vUv.y > 0.4)
+            {
+                gl_FragColor.g = 1.;
+            }
+        }
+    </script>
+
+    <script id="fragment-shader-create-gradient-tex" type="x-shader/x-fragment">
+        // Uses the red channel of a texture as a height map to create a gradient map
+        // Needs a float value texture
+        varying vec2 vUv;
+        uniform sampler2D _mainTex;
+        uniform vec2 _iResolution;
+
+        void main() {
+            offset[0] = vec2(-1.0,0.0);
+            offset[1] = vec2(1.0,0.0);
+            offset[2] = vec2(0.0,1.0);
+            offset[3] = vec2(0.0,-1.0);
+
+            float height = texture2D(_mainTex, vUv).r;
+            vec4 outputColor;
+
+            for(int i = 0; i < 4; i++) {
+                float sideHeight = texture2D(_mainTex, vUv + offset[i] / _iResolution.xy).r;
+                outputColor[i] = currentHeight - sideHeight;
+            }
+
+            gl_FragColor = outputColor;
+            // gl_FragColor = vec4(texture2D( _mainTex, vUv ).r,0.,0.,0.);
+            // gl_FragColor = vec4(heightChanges[0], heightChanges[1], heightChanges[2], heightChanges[3]);
+            // gl_FragColor = vec4(0.,0.,0.,0.);
+            // if(vUv.x < 0.6 && vUv.y < 0.6 && vUv.x > 0.4 && vUv.y > 0.4)
+            // {
+            //     gl_FragColor.g = 1.;
+            // }
+        }
+    </script>
+
+    <script id="fragment-shader-water-spread" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        uniform sampler2D _waterTex;
+        uniform sampler2D _gradientTex;
+        uniform vec2 _iResolution;
+        uniform float _damping;
+
+        vec2 offset[4];
+        float heightChanges[4];
+
+        void main() {
+
+            offset[0] = vec2(-1.0,0.0);
+            offset[1] = vec2(1.0,0.0);
+            offset[2] = vec2(0.0,1.0);
+            offset[3] = vec2(0.0,-1.0);
+
+            vec4 tex = texture2D(_waterTex, vUv);
+            float currentHeight = tex.r + tex.g;
+            // currentHeight = tex.g;
+
+            vec4 sideTex;
+            for(int i = 0; i < 4; i++) {
+                sideTex = texture2D(_waterTex, vUv + offset[i] / _iResolution.xy);
+                heightChanges[i] = .5 * (currentHeight - (sideTex.r + sideTex.g)) * sideTex.g;
+                // heightChanges[i] = (currentHeight - sideTex.g) * 0.1;
+                // heightChanges[i] = max(0., currentHeight - (sideTex.r + sideTex.g));
+            }
+
+            gl_FragColor = vec4(heightChanges[0], heightChanges[1], heightChanges[2], heightChanges[3]);
+            // gl_FragColor = vec4(1., heightChanges[1], heightChanges[2], heightChanges[3]);
+            // gl_FragColor = texture2D(_waterTex, vUv + offset[] / _iResolution.xy);
+        }
+    </script>
+
+    <script id="fragment-shader-water-absorb" type="x-shader/x-fragment">
+        varying vec2 vUv;
+        uniform sampler2D _moveTex;
+        uniform sampler2D _waterTex;
+        uniform vec2 _iResolution;
+
+        uniform vec2 _hiPoint;
+        uniform float _mouseDown;
+        vec2 offset[4];
+
+        void main() {
+
+            offset[0] = vec2(1.0,0.0);
+            offset[1] = vec2(-1.0,0.0);
+            offset[2] = vec2(0.0,-1.0);
+            offset[3] = vec2(0.0,1.0);
+
+            float newWater = 0.;
+            for(int i = 0; i < 4; i++) {
+                newWater += texture2D(_moveTex, vUv + offset[i] / _iResolution.xy)[i];
+            }
+            newWater -= dot(texture2D(_moveTex, vUv), vec4(1.));
+
+            float dist = 0.;
+            if(_mouseDown > 0.5) 
+            {
+                // dist = smoothstep(50.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+                dist = smoothstep(1.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+            }
+            newWater += dist;
+
+            vec4 tex = texture2D(_waterTex, vUv);
+            tex.g += newWater;
+
+            gl_FragColor = tex;
+            // gl_FragColor = dist* vec4(1.,0.,1.,1.);
+        }
+    </script>
+
     <script id="fragment-shader-pingpong" type="x-shader/x-fragment">
         uniform sampler2D _mainTex;
         uniform sampler2D _backBuffer;
