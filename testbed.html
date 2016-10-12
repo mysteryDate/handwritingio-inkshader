@@ -62,6 +62,7 @@
         varying vec2 vUv;
         uniform sampler2D _mainTex;
         uniform vec2 _iResolution;
+        vec2 offset[4];
 
         void main() {
             offset[0] = vec2(-1.0,0.0);
@@ -74,10 +75,11 @@
 
             for(int i = 0; i < 4; i++) {
                 float sideHeight = texture2D(_mainTex, vUv + offset[i] / _iResolution.xy).r;
-                outputColor[i] = currentHeight - sideHeight;
+                outputColor[i] = (height - sideHeight);
             }
 
             gl_FragColor = outputColor;
+            // gl_FragColor = vec4(0.,0.,0.,0.);
             // gl_FragColor = vec4(texture2D( _mainTex, vUv ).r,0.,0.,0.);
             // gl_FragColor = vec4(heightChanges[0], heightChanges[1], heightChanges[2], heightChanges[3]);
             // gl_FragColor = vec4(0.,0.,0.,0.);
@@ -106,18 +108,35 @@
             offset[3] = vec2(0.0,-1.0);
 
             vec4 tex = texture2D(_waterTex, vUv);
-            float currentHeight = tex.r + tex.g;
+
+            vec4 grad = texture2D(_gradientTex, vUv);
             // currentHeight = tex.g;
 
-            vec4 sideTex;
+            vec4 differences;
+            float sum;
             for(int i = 0; i < 4; i++) {
-                sideTex = texture2D(_waterTex, vUv + offset[i] / _iResolution.xy);
-                heightChanges[i] = .5 * (currentHeight - (sideTex.r + sideTex.g)) * sideTex.g;
+                differences[i] = max(0., grad[i] + tex.g);
+                sum += differences[i];
+
+                // sideTex = texture2D(_waterTex, vUv + offset[i] / _iResolution.xy);
+                // heightChanges[i] = .5 * (currentHeight - (sideTex.r + sideTex.g)) * sideTex.g;
                 // heightChanges[i] = (currentHeight - sideTex.g) * 0.1;
                 // heightChanges[i] = max(0., currentHeight - (sideTex.r + sideTex.g));
             }
+            // differences = vec4(1.) * tex.g;
+            // differences = grad + vec4(1.) * tex.g;
+            // sum = dot(vec4(1.), differences);
+            // sum = 4. * tex.g;
+            // Normalize em
+            if (sum != 0.) {
+                differences *= tex.g * _damping / sum;
+            }
+            gl_FragColor = differences;
+            // gl_FragColor = grad * 10.;
+            
 
-            gl_FragColor = vec4(heightChanges[0], heightChanges[1], heightChanges[2], heightChanges[3]);
+
+            // gl_FragColor = vec4(heightChanges[0], heightChanges[1], heightChanges[2], heightChanges[3]);
             // gl_FragColor = vec4(1., heightChanges[1], heightChanges[2], heightChanges[3]);
             // gl_FragColor = texture2D(_waterTex, vUv + offset[] / _iResolution.xy);
         }
@@ -150,6 +169,7 @@
             if(_mouseDown > 0.5) 
             {
                 // dist = smoothstep(50.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+                // dist = smoothstep(_iResolution.x / 8.,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _iResolution.x * 200.;
                 dist = smoothstep(1.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
             }
             newWater += dist;
@@ -221,7 +241,7 @@
         renderer.setPixelRatio(dpr);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0xffffff);
-        var texRes = new THREE.Vector2(8,8);
+        var texRes = new THREE.Vector2(64,64);
         // --------
 
         // Cameras
@@ -246,6 +266,7 @@
         // Because webGL complains when you sample from and write to the same texture
         var tex2 = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         var moveTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
+        var gradientTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         // --------
 
         // Fullscreen quad for ping-ponging
@@ -347,7 +368,7 @@
         gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
         gui.addColor(controller, "color").listen();
         gui.add(controller, "wireframe").onChange(controller.restart);
-        gui.add(controller,"damping",0.,10.).listen();
+        gui.add(controller,"damping",0.,1.).listen();
         gui.add(controller,"mix",0.,1.).listen();
         gui.add(controller,"floatsx").listen();
         gui.add(controller,"floatsy").listen();
@@ -360,10 +381,11 @@
         copyScene = new THREE.Scene();
         var copyMat = new THREE.ShaderMaterial({
             uniforms: {
-                _mainTex: {value: tex1.texture}
+                _mainTex: {value: tex1.texture},
+                _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)}
             },
             vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-copy-texture' ).textContent
+            fragmentShader: document.getElementById( 'fragment-shader-create-gradient-tex' ).textContent
         });
         quad = new THREE.Mesh( plane, copyMat );
         quad.position.z = -100;
@@ -372,6 +394,7 @@
         var spreadMat = new THREE.ShaderMaterial({
             uniforms: {
                 _waterTex: {value: tex1.texture},
+                _gradientTex: {value: gradientTex.texture},
                 _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
                 _damping: {value: 0.1}
             },
@@ -400,7 +423,7 @@
         function render() {
             window.setTimeout(function() {
                 requestAnimationFrame(render);
-            }, 1000);
+            }, 0);
             stats.update();
 
             spreadMat.uniforms._damping.value = controller.damping;
@@ -439,8 +462,15 @@
 
             absorbMat.uniforms._waterTex.value = tex1.texture;
             spreadMat.uniforms._waterTex.value = tex1.texture;
-            // basicMaterial.uniforms._mainTex.value = moveTex.texture;
-            basicMaterial.uniforms._mainTex.value = tex2.texture;
+            if(controller.floatsx < 1) 
+                basicMaterial.uniforms._mainTex.value = tex1.texture;
+            else if(controller.floatsx < 2) 
+                basicMaterial.uniforms._mainTex.value = tex2.texture;
+            else if(controller.floatsx < 3) 
+                basicMaterial.uniforms._mainTex.value = moveTex.texture;
+            else if(controller.floatsx > 3) 
+                basicMaterial.uniforms._mainTex.value = gradientTex.texture;
+            // basicMaterial.uniforms._mainTex.value = tex2.texture;
 
             // copyMat.uniforms._mainTex.value = tex2.texture;
             renderer.render( outputScene, camera );
@@ -467,14 +497,12 @@
         var loader = new THREE.TextureLoader();
         loader.load('cracked-mud-inverted.png', function ( paperTex ) {
             
-
             copyMat.uniforms._mainTex.value = paperTex;
             basicMaterial.uniforms._paperTex.value = paperTex;
             pingpongMaterial.uniforms._paperTex.value = paperTex;
             controller.restart();
 
-            renderer.render(copyScene, cameraRTT, tex1);
-            renderer.render(copyScene, cameraRTT, tex2);
+            renderer.render(copyScene, cameraRTT, gradientTex);
 
             render();
         });
