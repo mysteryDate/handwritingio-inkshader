@@ -169,8 +169,8 @@
             if(_mouseDown > 0.5) 
             {
                 // dist = smoothstep(50.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
-                // dist = smoothstep(_iResolution.x / 8.,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _iResolution.x * 200.;
-                dist = smoothstep(1.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+                dist = smoothstep(_iResolution.x / 8.,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _iResolution.x * 200.;
+                // dist = smoothstep(1.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
             }
             newWater += dist;
 
@@ -240,8 +240,8 @@
         var renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
         renderer.setPixelRatio(dpr);
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setClearColor(0xffffff);
-        var texRes = new THREE.Vector2(64,64);
+        // renderer.setClearColor(0xffffff);
+        var texRes = new THREE.Vector2(window.innerWidth, window.innerHeight);
         // --------
 
         // Cameras
@@ -255,7 +255,7 @@
             inFilter: THREE.LinearFilter,
             magFilter: THREE.NearestFilter,
             format: THREE.RGBAFormat,
-            type: THREE.FloatType,
+            // type: THREE.FloatType,
             depthBuffer: false,
             stencilBuffer: false
         }
@@ -267,6 +267,7 @@
         var tex2 = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         var moveTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         var gradientTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
+        gradientTex.type = THREE.FloatType;
         // --------
 
         // Fullscreen quad for ping-ponging
@@ -319,8 +320,8 @@
         var mesh, boundingBox;
         var controller = {
             degrees: 60,
-            lineWidth: 5,
-            color: "#000ff0",
+            lineWidth: 2.8,
+            color: "#00ff00",
             wireframe: false,
             damping: 1.,
             mix: 1.,
@@ -431,10 +432,10 @@
             // pingpongMaterial.uniforms._mix.value = controller.mix;
             // pingpongMaterial.uniforms._floats.value = new THREE.Vector4(controller.floatsx, controller.floatsy, controller.floatsz, controller.floatsw);
 
-            // if ( mesh.isAnimating() ) 
-            // {
-            //     renderer.render( writingScene, cameraRTT, tex1 );
-            // }
+            if ( mesh.isAnimating() ) 
+            {
+                renderer.render( writingScene, cameraRTT, tex1 );
+            }
             // else 
             // {
             //     pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
