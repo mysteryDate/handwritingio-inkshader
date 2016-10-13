@@ -23,6 +23,7 @@
 <body>
 
     <script id="vertex-shader" type="x-shader/x-vertex">
+        // Just a simple vertex shader, used by all materials
         varying vec2 vUv;
         void main() {
             vUv = uv;
@@ -49,80 +50,48 @@
         vec2 offset[4];
 
         void main() {
-            offset[0] = vec2(-1.0,0.0);
-            offset[1] = vec2(1.0,0.0);
-            offset[2] = vec2(0.0,1.0);
-            offset[3] = vec2(0.0,-1.0);
+            offset[0] = vec2(1.0,0.0);
+            offset[1] = vec2(-1.0,0.0);
+            offset[2] = vec2(0.0,-1.0);
+            offset[3] = vec2(0.0,1.0);
 
             float height = texture2D(_mainTex, vUv).r;
-            vec4 outputColor;
 
             for(int i = 0; i < 4; i++) {
+                // Find the height difference between this pixel and the one next to it
                 float sideHeight = texture2D(_mainTex, vUv + offset[i] / _iResolution.xy).r;
-                outputColor[i] = (height - sideHeight);
+                // Write it to a channel of hte texture
+                gl_FragColor[i] = ((height - sideHeight) + 1.) / 2.;
             }
-
-            gl_FragColor = outputColor;
-            // gl_FragColor = vec4(0.,0.,0.,0.);
-            // gl_FragColor = vec4(texture2D( _mainTex, vUv ).r,0.,0.,0.);
-            // gl_FragColor = vec4(heightChanges[0], heightChanges[1], heightChanges[2], heightChanges[3]);
-            // gl_FragColor = vec4(0.,0.,0.,0.);
-            // if(vUv.x < 0.6 && vUv.y < 0.6 && vUv.x > 0.4 && vUv.y > 0.4)
-            // {
-            //     gl_FragColor.g = 1.;
-            // }
         }
     </script>
 
     <script id="fragment-shader-water-spread" type="x-shader/x-fragment">
+        // Here we read from a heightmap and water texture to create another texture
+        // This output texture uses the r, g, b, a channels to denote where the water should move
+        // (r, g, b, a) => (right, left, up, down) 
         varying vec2 vUv;
         uniform sampler2D _waterTex;
         uniform sampler2D _gradientTex;
-        uniform vec2 _iResolution;
+        uniform sampler2D _paperTex;
         uniform float _damping;
 
         vec2 offset[4];
         float heightChanges[4];
 
         void main() {
-
-            offset[0] = vec2(-1.0,0.0);
-            offset[1] = vec2(1.0,0.0);
-            offset[2] = vec2(0.0,1.0);
-            offset[3] = vec2(0.0,-1.0);
-
-            vec4 tex = texture2D(_waterTex, vUv);
-
-            vec4 grad = texture2D(_gradientTex, vUv);
-            // currentHeight = tex.g;
-
-            vec4 differences;
-            float sum;
-            for(int i = 0; i < 4; i++) {
-                differences[i] = max(0., grad[i] + tex.g);
-                sum += differences[i];
-
-                // sideTex = texture2D(_waterTex, vUv + offset[i] / _iResolution.xy);
-                // heightChanges[i] = .5 * (currentHeight - (sideTex.r + sideTex.g)) * sideTex.g;
-                // heightChanges[i] = (currentHeight - sideTex.g) * 0.1;
-                // heightChanges[i] = max(0., currentHeight - (sideTex.r + sideTex.g));
-            }
-            // differences = vec4(1.) * tex.g;
-            // differences = grad + vec4(1.) * tex.g;
-            // sum = dot(vec4(1.), differences);
-            // sum = 4. * tex.g;
-            // Normalize em
-            if (sum != 0.) {
-                differences *= tex.g * _damping / sum;
-            }
-            gl_FragColor = differences;
-            // gl_FragColor = grad * 10.;
+            // Green channel is the height of the water
+            float waterHeight = texture2D(_waterTex, vUv).g;
             
+            float paperHeight = texture2D(_paperTex, vUv).r;
+            vec4 grad = 2. * texture2D(_gradientTex, vUv) - 1.;
 
-
-            // gl_FragColor = vec4(heightChanges[0], heightChanges[1], heightChanges[2], heightChanges[3]);
-            // gl_FragColor = vec4(1., heightChanges[1], heightChanges[2], heightChanges[3]);
-            // gl_FragColor = texture2D(_waterTex, vUv + offset[] / _iResolution.xy);
+            // Find all directions in which the water is goign down
+            vec4 differences = max(vec4(0.), grad + vec4(1.) * (waterHeight + paperHeight));
+            // Normalize it
+            differences /= dot(differences, vec4(1.));
+            // Scale it by waterHeight and damping
+            gl_FragColor = differences * waterHeight * _damping;
         }
     </script>
 
@@ -152,17 +121,19 @@
             float dist = 0.;
             if(_mouseDown > 0.5) 
             {
-                // dist = smoothstep(50.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
-                dist = smoothstep(_iResolution.x / 8.,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _iResolution.x * 200.;
-                // dist = smoothstep(1.,0.,length(_hiPoint.xy - gl_FragCoord.xy));
+                // dist = 1.;
+                dist = smoothstep(_iResolution.x / 32.,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _iResolution.x * 32. * 50.;
             }
             newWater += dist;
 
             vec4 tex = texture2D(_waterTex, vUv);
             tex.g += newWater;
 
+            float paperHeight = texture2D(_paperTex, vUv).r;
+            tex.g *= (1. - _absorbRate);
+            tex.b += tex.g * _absorbRate;
+
             gl_FragColor = tex;
-            // gl_FragColor = dist* vec4(1.,0.,1.,1.);
         }
     </script>
 
@@ -379,6 +350,7 @@
         var spreadMat = new THREE.ShaderMaterial({
             uniforms: {
                 _waterTex: {value: tex1.texture},
+                _paperTex: {value: tex1.texture},
                 _gradientTex: {value: gradientTex.texture},
                 _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
                 _damping: {value: 0.1}
@@ -390,6 +362,8 @@
             uniforms: {
                 _moveTex: {value: moveTex.texture},
                 _waterTex: {value: tex1.texture},
+                _paperTex: {value: tex1.texture},
+                _absorbRate: {value: 0.},
                 _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
                 _hiPoint: {value: new THREE.Vector2(0.,0.)},
                 _mouseDown: {value: 0.}
@@ -483,7 +457,8 @@
         loader.load('cracked-mud-inverted.png', function ( paperTex ) {
             
             copyMat.uniforms._mainTex.value = paperTex;
-            basicMaterial.uniforms._paperTex.value = paperTex;
+            spreadMat.uniforms._paperTex.value = paperTex;
+            absorbMat.uniforms._paperTex.value = paperTex;
             pingpongMaterial.uniforms._paperTex.value = paperTex;
             controller.restart();
 
