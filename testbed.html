@@ -232,251 +232,184 @@
         // gradientTex.texture.type = THREE.FloatType;
         // --------
 
-        // Fullscreen quad for ping-ponging
-        var pingpongScene = new THREE.Scene();
-        var pingpongMaterial = new THREE.ShaderMaterial( {
-            uniforms: { 
-                _mainTex: { value: tex1.texture },
-                _backBuffer: { value: tex2.texture },
-                _paperTex: { value: tex1.texture },
-                _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
-                _damping: {value: 0.99},
-                _hiPoint: {value: new THREE.Vector2(0.,0.)},
-                _mouseDown: {value: 0.},
-                _color: {value: new THREE.Color('#ffffff')},
-                _mix: {value: 1.},
-                _floats: {value: new THREE.Vector4(1.,1.,1.,1.)}
-            },
-            vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-pingpong' ).textContent,
-
-            depthWrite: false
-
-        } );
+        // Our RTT geometry
         var plane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
-        var quad = new THREE.Mesh( plane, pingpongMaterial );
-        quad.position.z = -100;
-        pingpongScene.add( quad );
+
+        // Output scenes
+            // Basic output scene
+            var outputScene = new THREE.Scene();
+            var basicMaterial = new THREE.ShaderMaterial( {
+                uniforms: {
+                    _mainTex: {value: tex1.texture},
+                    _color: {value: new THREE.Color('#ffffff')}
+                },
+                vertexShader: document.getElementById('vertex-shader').textContent,
+                fragmentShader: document.getElementById('fragment-shader-simple').textContent
+            })
+            var outputQuad = new THREE.Mesh( plane, basicMaterial );
+            outputScene.add( outputQuad );
+            // --------
+
+            // Just for the writing mesh
+            var writingScene = new THREE.Scene();
         // --------
 
-        // Basic output scene
-        var outputScene = new THREE.Scene();
-        var basicMaterial = new THREE.ShaderMaterial( {
-            uniforms: {
-                _mainTex: {value: tex1.texture},
-                _color: {value: new THREE.Color('#ffffff')}
-            },
-            vertexShader: document.getElementById('vertex-shader').textContent,
-            fragmentShader: document.getElementById('fragment-shader-simple').textContent
-        })
-        var outputQuad = new THREE.Mesh( plane, basicMaterial );
-        outputQuad.position.z = -100;
-        outputScene.add( outputQuad );
-        // --------
+        // Controller and gui
+            var mesh, boundingBox;
+            var controller = {
+                degrees: 60,
+                lineWidth: 3.5,
+                color: "#00ff00",
+                damping: 1.,
+                absorbRate: 0.01,
 
-        // Just for the writing mesh
-        var writingScene = new THREE.Scene();
-        // --------
+                restart: function() {
+                    if (mesh) {
+                        // TODO: dispose
+                        writingScene.remove(mesh);
+                    }
+                    mesh = new ChiselTipMesh({
+                        strokeData: TestStrokes[3].strokeData,
+                        degrees: controller.degrees,
+                        lineWidth: controller.lineWidth,
+                        color: new THREE.Color(controller.color),
+                    });
+                    mesh.geometry.center();
+                    mesh.material.wireframe = controller.wireframe;
+                    writingScene.add(mesh);
+                    mesh.start();
 
-        // Controller
-        var mesh, boundingBox;
-        var controller = {
-            degrees: 60,
-            lineWidth: 3.5,
-            color: "#00ff00",
-            wireframe: false,
-            damping: 1.,
-            mix: 1.,
-            absorbRate: 0.01,
-            floatsx: 1.,
-            floatsy: 1.,
-            floatsz: 50.,
-            floatsw: 1.,
+                    // Properly size camera and plane for the render-to-texture operation
+                    boundingBox = new THREE.Box3().setFromObject(mesh);
+                    var aspect = window.innerWidth / window.innerHeight;
+                    cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
+                    plane = new THREE.PlaneBufferGeometry( boundingBox.max.x - boundingBox.min.x, (boundingBox.max.x - boundingBox.min.x) / aspect );
+                    // ------------
+                },
 
-            restart: function() {
-                if (mesh) {
-                    // TODO: dispose
+                clear: function() {
                     writingScene.remove(mesh);
+                    mesh.start();
                 }
-                mesh = new ChiselTipMesh({
-                    strokeData: TestStrokes[3].strokeData,
-                    degrees: controller.degrees,
-                    lineWidth: controller.lineWidth,
-                    color: new THREE.Color(controller.color),
-                });
-                mesh.geometry.center();
-                mesh.material.wireframe = controller.wireframe;
-                writingScene.add(mesh);
-                mesh.start();
-
-                boundingBox = new THREE.Box3().setFromObject(mesh);
-                var aspect = window.innerWidth / window.innerHeight;
-                var newWidth = boundingBox.max.x - boundingBox.min.x;
-                var newHeight = newWidth/aspect;
-                cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
-                plane = new THREE.PlaneBufferGeometry( newWidth, newHeight );
-                pingpongScene.remove(quad);
-                quad = new THREE.Mesh( plane, pingpongMaterial );
-                quad.position.z = -100;
-                pingpongScene.add( quad );
-            },
-
-            clear: function() {
-                writingScene.remove(mesh);
-                renderer.render( writingScene, cameraRTT, tex1 );
-                renderer.render( writingScene, cameraRTT, tex2 );
-                renderer.render( writingScene, cameraRTT, moveTex );
-                mesh.start();
             }
-        }
-        controller.restart();
+            controller.restart();
 
-        gui.add(controller, "degrees", 0, 359).onChange(controller.restart);
-        gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
-        gui.addColor(controller, "color").listen();
-        gui.add(controller, "wireframe").onChange(controller.restart);
-        gui.add(controller,"damping",0.,1.).listen();
-        gui.add(controller,"mix",0.,1.).listen();
-        gui.add(controller,"absorbRate",0.0,0.2).listen();
-        gui.add(controller,"floatsx").listen();
-        gui.add(controller,"floatsy").listen();
-        gui.add(controller,"floatsz").listen();
-        gui.add(controller,"floatsw").listen();
-        gui.add(controller, "restart");
-        gui.add(controller, "clear");
+            gui.add(controller, "degrees", 0, 359).onChange(controller.restart);
+            gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
+            gui.addColor(controller, "color").listen();
+            gui.add(controller,"damping",0.,1.).listen();
+            gui.add(controller,"absorbRate",0.0,0.2).listen();
+            gui.add(controller, "restart");
+            gui.add(controller, "clear");
         // --------
 
-        copyScene = new THREE.Scene();
-        var copyMat = new THREE.ShaderMaterial({
-            uniforms: {
-                _mainTex: {value: tex1.texture},
-                _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)}
-            },
-            vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-create-gradient-tex' ).textContent
-        });
-        quad = new THREE.Mesh( plane, copyMat );
-        quad.position.z = -100;
-        copyScene.add(quad);
+        // Fancy scenes for ping-ponging
+            // Just for generating the gradient
+            gradientScene = new THREE.Scene();
+            var gradientMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    _mainTex: {value: tex1.texture},
+                    _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)}
+                },
+                vertexShader: document.getElementById( 'vertex-shader' ).textContent,
+                fragmentShader: document.getElementById( 'fragment-shader-create-gradient-tex' ).textContent
+            });
+            var gradientQuad = new THREE.Mesh( plane, gradientMat );
+            gradientQuad.position.z = -100;
+            gradientScene.add(gradientQuad);
+            // --------
 
-        var spreadMat = new THREE.ShaderMaterial({
-            uniforms: {
-                _waterTex: {value: tex1.texture},
-                _paperTex: {value: tex1.texture},
-                _gradientTex: {value: gradientTex.texture},
-                _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
-                _damping: {value: 0.1}
-            },
-            vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-water-spread').textContent
-        });
-        var absorbMat = new THREE.ShaderMaterial({
-            uniforms: {
-                _moveTex: {value: moveTex.texture},
-                _waterTex: {value: tex1.texture},
-                _paperTex: {value: tex1.texture},
-                _absorbRate: {value: 0.},
-                _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
-                _hiPoint: {value: new THREE.Vector2(0.,0.)},
-                _mouseDown: {value: 0.}
-            },
-            vertexShader: document.getElementById( 'vertex-shader' ).textContent,
-            fragmentShader: document.getElementById( 'fragment-shader-water-absorb' ).textContent
-        });
-        spreadScene = new THREE.Scene();
-        spreadQuad = new THREE.Mesh( plane, spreadMat );
-        spreadScene.add(spreadQuad);
-        absorbScene = new THREE.Scene();
-        absorbQuad = new THREE.Mesh( plane, absorbMat );
-        absorbScene.add(absorbQuad);
+            // The spreading step
+            var spreadMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    _waterTex: {value: tex1.texture},
+                    _paperTex: {value: tex1.texture},
+                    _gradientTex: {value: gradientTex.texture},
+                    _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
+                    _damping: {value: 0.1}
+                },
+                vertexShader: document.getElementById( 'vertex-shader' ).textContent,
+                fragmentShader: document.getElementById( 'fragment-shader-water-spread').textContent
+            });
+            spreadScene = new THREE.Scene();
+            spreadQuad = new THREE.Mesh( plane, spreadMat );
+            spreadScene.add(spreadQuad);
+            // --------
+
+            // The absorbtion step
+            var absorbMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    _moveTex: {value: moveTex.texture},
+                    _waterTex: {value: tex1.texture},
+                    _paperTex: {value: tex1.texture},
+                    _absorbRate: {value: 0.},
+                    _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
+                    _hiPoint: {value: new THREE.Vector2(0.,0.)},
+                    _mouseDown: {value: 0.}
+                },
+                vertexShader: document.getElementById( 'vertex-shader' ).textContent,
+                fragmentShader: document.getElementById( 'fragment-shader-water-absorb' ).textContent
+            });
+            absorbScene = new THREE.Scene();
+            absorbQuad = new THREE.Mesh( plane, absorbMat );
+            absorbScene.add(absorbQuad);
+            // --------
 
         
         function render() {
-            window.setTimeout(function() {
-                requestAnimationFrame(render);
-            }, 0);
+            requestAnimationFrame(render);
             stats.update();
 
             spreadMat.uniforms._damping.value = controller.damping;
             basicMaterial.uniforms._color.value = new THREE.Color(controller.color);
             absorbMat.uniforms._absorbRate.value = controller.absorbRate;
-            // pingpongMaterial.uniforms._damping.value = 1 + controller.damping/1000.;
-            // pingpongMaterial.uniforms._mix.value = controller.mix;
-            // pingpongMaterial.uniforms._floats.value = new THREE.Vector4(controller.floatsx, controller.floatsy, controller.floatsz, controller.floatsw);
 
             if ( mesh.isAnimating() ) 
             {
                 renderer.render( writingScene, cameraRTT, tex1 );
             }
-            // else 
-            // {
-            //     pingpongMaterial.uniforms._color.value = new THREE.Color(controller.color);
-            //     renderer.render( pingpongScene, cameraRTT, outputTex );
-            //     // Ping pong the textures
-            //     var a = tex1;
-            //     tex1 = outputTex;
-            //     outputTex = tex2;
-            //     tex2 = a;
+            else {
+                renderer.render( spreadScene, cameraRTT, moveTex);
+                renderer.render( absorbScene, cameraRTT, tex2 );
 
-            //     // Set the proper values, tex1 + tex2 (copy of outputTex) --> writes to outputTex
-            //     pingpongMaterial.uniforms._mainTex.value = tex1.texture;
-            //     pingpongMaterial.uniforms._backBuffer.value = tex2.texture;
+                var a = tex1;
+                tex1 = tex2;
+                tex2 = a;
 
-            //     // Make sure the main camera is using the right texture
-            //     basicMaterial.uniforms._mainTex.value = tex1.texture;
-            // }
-
-            renderer.render( spreadScene, cameraRTT, moveTex);
-            renderer.render( absorbScene, cameraRTT, tex2 );
-
-            var a = tex1;
-            tex1 = tex2;
-            tex2 = a;
-
-            absorbMat.uniforms._waterTex.value = tex1.texture;
-            spreadMat.uniforms._waterTex.value = tex1.texture;
-            if(controller.floatsx < 1) 
+                absorbMat.uniforms._waterTex.value = tex1.texture;
+                spreadMat.uniforms._waterTex.value = tex1.texture;
                 basicMaterial.uniforms._mainTex.value = tex1.texture;
-            else if(controller.floatsx < 2) 
-                basicMaterial.uniforms._mainTex.value = tex2.texture;
-            else if(controller.floatsx < 3) 
-                basicMaterial.uniforms._mainTex.value = moveTex.texture;
-            else if(controller.floatsx > 3) 
-                basicMaterial.uniforms._mainTex.value = gradientTex.texture;
-            // basicMaterial.uniforms._mainTex.value = tex2.texture;
+            }
 
-            // copyMat.uniforms._mainTex.value = tex2.texture;
             renderer.render( outputScene, camera );
         }
 
-        canvas.onmousedown = function(e) {
-            pingpongMaterial.uniforms._mouseDown.value = 1.0;
-            absorbMat.uniforms._mouseDown.value = 1.0;
-        }
-        canvas.onmousemove = function(e) {
-            pingpongMaterial.uniforms._hiPoint.value = new THREE.Vector2(
-                e.clientX * texRes.x / window.innerWidth, (window.innerHeight - e.clientY) * texRes.y / window.innerHeight
-            );
-            absorbMat.uniforms._hiPoint.value = new THREE.Vector2(
-                e.clientX * texRes.x / window.innerWidth, (window.innerHeight - e.clientY) * texRes.y / window.innerHeight
-            );
-        }
-        canvas.onmouseup = function(e) {
-            pingpongMaterial.uniforms._mouseDown.value = 0.0;
-            absorbMat.uniforms._mouseDown.value = 0.0;
-        }
+        // Mouse controls
+            canvas.onmousedown = function(e) {
+                absorbMat.uniforms._mouseDown.value = 1.0;
+            }
+            canvas.onmousemove = function(e) {
+                absorbMat.uniforms._hiPoint.value = new THREE.Vector2(
+                    e.clientX * texRes.x / window.innerWidth, (window.innerHeight - e.clientY) * texRes.y / window.innerHeight
+                );
+            }
+            canvas.onmouseup = function(e) {
+                absorbMat.uniforms._mouseDown.value = 0.0;
+            }
+        // -----
 
         // For our paper
         var loader = new THREE.TextureLoader();
         loader.load('cracked-mud-inverted.png', function ( paperTex ) {
             
-            copyMat.uniforms._mainTex.value = paperTex;
+            // Get the loaded paper texture into the materials that need it
+            gradientMat.uniforms._mainTex.value = paperTex;
             spreadMat.uniforms._paperTex.value = paperTex;
             absorbMat.uniforms._paperTex.value = paperTex;
-            pingpongMaterial.uniforms._paperTex.value = paperTex;
             controller.restart();
 
-            renderer.render(copyScene, cameraRTT, gradientTex);
+            // Generate the gradient texture
+            renderer.render(gradientScene, cameraRTT, gradientTex);
 
             render();
         });
