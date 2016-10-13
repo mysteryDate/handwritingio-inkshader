@@ -29,7 +29,7 @@ ChiselTipMesh = function(options) {
             uniform vec3 color;
             varying float age;
             void main() {
-                gl_FragColor = vec4(color, 0.0);
+                gl_FragColor = vec4(0.,1.,0., 0.0) * 5.;
                 if (age > 0.0) {
                     gl_FragColor.a = 1.0;
                 }
