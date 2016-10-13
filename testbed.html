@@ -229,11 +229,18 @@
         var tex2 = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         var moveTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         var gradientTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
-        // gradientTex.texture.type = THREE.FloatType;
         // --------
 
         // Our RTT geometry
-        var plane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
+        var RTTPlane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
+        var chiselMesh = new ChiselTipMesh({ strokeData: TestStrokes[3].strokeData });
+        chiselMesh.geometry.center();
+        // Properly size camera and RTTPlane for the render-to-texture operation
+        boundingBox = new THREE.Box3().setFromObject(chiselMesh);
+        var aspect = window.innerWidth / window.innerHeight;
+        cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
+        RTTPlane = new THREE.PlaneBufferGeometry( boundingBox.max.x - boundingBox.min.x, (boundingBox.max.x - boundingBox.min.x) / aspect );
+        // --------
 
         // Output scenes
             // Basic output scene
@@ -245,8 +252,9 @@
                 },
                 vertexShader: document.getElementById('vertex-shader').textContent,
                 fragmentShader: document.getElementById('fragment-shader-simple').textContent
-            })
-            var outputQuad = new THREE.Mesh( plane, basicMaterial );
+            });
+            var outputPlane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
+            var outputQuad = new THREE.Mesh( outputPlane, basicMaterial );
             outputScene.add( outputQuad );
             // --------
 
@@ -255,7 +263,7 @@
         // --------
 
         // Controller and gui
-            var mesh, boundingBox;
+            // var mesh, boundingBox;
             var controller = {
                 degrees: 60,
                 lineWidth: 3.5,
@@ -264,32 +272,32 @@
                 absorbRate: 0.01,
 
                 restart: function() {
-                    if (mesh) {
+                    if (chiselMesh) {
                         // TODO: dispose
-                        writingScene.remove(mesh);
+                        writingScene.remove(chiselMesh);
                     }
-                    mesh = new ChiselTipMesh({
+                    chiselMesh = new ChiselTipMesh({
                         strokeData: TestStrokes[3].strokeData,
                         degrees: controller.degrees,
                         lineWidth: controller.lineWidth,
                         color: new THREE.Color(controller.color),
                     });
-                    mesh.geometry.center();
-                    mesh.material.wireframe = controller.wireframe;
-                    writingScene.add(mesh);
-                    mesh.start();
+                    chiselMesh.geometry.center();
+                    chiselMesh.material.wireframe = controller.wireframe;
+                    writingScene.add(chiselMesh);
+                    chiselMesh.start();
 
-                    // Properly size camera and plane for the render-to-texture operation
-                    boundingBox = new THREE.Box3().setFromObject(mesh);
-                    var aspect = window.innerWidth / window.innerHeight;
-                    cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
-                    plane = new THREE.PlaneBufferGeometry( boundingBox.max.x - boundingBox.min.x, (boundingBox.max.x - boundingBox.min.x) / aspect );
+                    // Properly size camera and RTTPlane for the render-to-texture operation
+                    // boundingBox = new THREE.Box3().setFromObject(chiselMesh);
+                    // var aspect = window.innerWidth / window.innerHeight;
+                    // cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
+                    // RTTPlane = new THREE.PlaneBufferGeometry( boundingBox.max.x - boundingBox.min.x, (boundingBox.max.x - boundingBox.min.x) / aspect );
                     // ------------
                 },
 
                 clear: function() {
-                    writingScene.remove(mesh);
-                    mesh.start();
+                    writingScene.remove(chiselMesh);
+                    chiselMesh.start();
                 }
             }
             controller.restart();
@@ -314,7 +322,7 @@
                 vertexShader: document.getElementById( 'vertex-shader' ).textContent,
                 fragmentShader: document.getElementById( 'fragment-shader-create-gradient-tex' ).textContent
             });
-            var gradientQuad = new THREE.Mesh( plane, gradientMat );
+            var gradientQuad = new THREE.Mesh( RTTPlane, gradientMat );
             gradientQuad.position.z = -100;
             gradientScene.add(gradientQuad);
             // --------
@@ -332,7 +340,7 @@
                 fragmentShader: document.getElementById( 'fragment-shader-water-spread').textContent
             });
             spreadScene = new THREE.Scene();
-            spreadQuad = new THREE.Mesh( plane, spreadMat );
+            spreadQuad = new THREE.Mesh( RTTPlane, spreadMat );
             spreadScene.add(spreadQuad);
             // --------
 
@@ -351,9 +359,10 @@
                 fragmentShader: document.getElementById( 'fragment-shader-water-absorb' ).textContent
             });
             absorbScene = new THREE.Scene();
-            absorbQuad = new THREE.Mesh( plane, absorbMat );
+            absorbQuad = new THREE.Mesh( RTTPlane, absorbMat );
             absorbScene.add(absorbQuad);
             // --------
+        // --------
 
         
         function render() {
@@ -364,7 +373,7 @@
             basicMaterial.uniforms._color.value = new THREE.Color(controller.color);
             absorbMat.uniforms._absorbRate.value = controller.absorbRate;
 
-            if ( mesh.isAnimating() ) 
+            if ( chiselMesh.isAnimating() ) 
             {
                 renderer.render( writingScene, cameraRTT, tex1 );
             }
@@ -385,17 +394,17 @@
         }
 
         // Mouse controls
-            canvas.onmousedown = function(e) {
-                absorbMat.uniforms._mouseDown.value = 1.0;
-            }
-            canvas.onmousemove = function(e) {
-                absorbMat.uniforms._hiPoint.value = new THREE.Vector2(
-                    e.clientX * texRes.x / window.innerWidth, (window.innerHeight - e.clientY) * texRes.y / window.innerHeight
-                );
-            }
-            canvas.onmouseup = function(e) {
-                absorbMat.uniforms._mouseDown.value = 0.0;
-            }
+        canvas.onmousedown = function(e) {
+            absorbMat.uniforms._mouseDown.value = 1.0;
+        }
+        canvas.onmousemove = function(e) {
+            absorbMat.uniforms._hiPoint.value = new THREE.Vector2(
+                e.clientX * texRes.x / window.innerWidth, (window.innerHeight - e.clientY) * texRes.y / window.innerHeight
+            );
+        }
+        canvas.onmouseup = function(e) {
+            absorbMat.uniforms._mouseDown.value = 0.0;
+        }
         // -----
 
         // For our paper
