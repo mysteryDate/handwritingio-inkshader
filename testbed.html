@@ -32,12 +32,14 @@
     </script>
 
     <script id="fragment-shader-simple" type="x-shader/x-fragment">
+        // Read from a texture, that's it
         varying vec2 vUv;
         uniform sampler2D _mainTex;
-        uniform sampler2D _paperTex;
+        uniform vec3 _color;
 
         void main() {
-            gl_FragColor = texture2D( _mainTex, vUv );
+            vec4 tex = texture2D( _mainTex, vUv );
+            gl_FragColor = vec4(1.) - (vec4( (vec3(1.) - _color) * (tex.g + tex.b),1.));
         }
     </script>
 
@@ -99,18 +101,23 @@
         varying vec2 vUv;
         uniform sampler2D _moveTex;
         uniform sampler2D _waterTex;
+        uniform sampler2D _paperTex;
         uniform vec2 _iResolution;
+        uniform float _absorbRate;
 
+        // For mouse response
         uniform vec2 _hiPoint;
         uniform float _mouseDown;
+
         vec2 offset[4];
 
         void main() {
 
-            offset[0] = vec2(1.0,0.0);
-            offset[1] = vec2(-1.0,0.0);
-            offset[2] = vec2(0.0,-1.0);
-            offset[3] = vec2(0.0,1.0);
+            // Sample the four nearest pixes in the opposite diretion of the gradient tex
+            offset[0] = vec2(-1.0,0.0);
+            offset[1] = vec2(1.0,0.0);
+            offset[2] = vec2(0.0,1.0);
+            offset[3] = vec2(0.0,-1.0);
 
             float newWater = 0.;
             for(int i = 0; i < 4; i++) {
@@ -210,7 +217,7 @@
             inFilter: THREE.LinearFilter,
             magFilter: THREE.NearestFilter,
             format: THREE.RGBAFormat,
-            // type: THREE.FloatType,
+            type: THREE.FloatType,
             depthBuffer: false,
             stencilBuffer: false
         }
@@ -222,7 +229,7 @@
         var tex2 = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         var moveTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
         var gradientTex = new THREE.WebGLRenderTarget( texRes.x, texRes.y, textureOptions );
-        gradientTex.type = THREE.FloatType;
+        // gradientTex.texture.type = THREE.FloatType;
         // --------
 
         // Fullscreen quad for ping-ponging
@@ -257,7 +264,7 @@
         var basicMaterial = new THREE.ShaderMaterial( {
             uniforms: {
                 _mainTex: {value: tex1.texture},
-                _paperTex: {value: tex2.texture}
+                _color: {value: new THREE.Color('#ffffff')}
             },
             vertexShader: document.getElementById('vertex-shader').textContent,
             fragmentShader: document.getElementById('fragment-shader-simple').textContent
@@ -275,11 +282,12 @@
         var mesh, boundingBox;
         var controller = {
             degrees: 60,
-            lineWidth: 2.8,
+            lineWidth: 3.5,
             color: "#00ff00",
             wireframe: false,
             damping: 1.,
             mix: 1.,
+            absorbRate: 0.01,
             floatsx: 1.,
             floatsy: 1.,
             floatsz: 50.,
@@ -315,6 +323,9 @@
 
             clear: function() {
                 writingScene.remove(mesh);
+                renderer.render( writingScene, cameraRTT, tex1 );
+                renderer.render( writingScene, cameraRTT, tex2 );
+                renderer.render( writingScene, cameraRTT, moveTex );
                 mesh.start();
             }
         }
@@ -326,6 +337,7 @@
         gui.add(controller, "wireframe").onChange(controller.restart);
         gui.add(controller,"damping",0.,1.).listen();
         gui.add(controller,"mix",0.,1.).listen();
+        gui.add(controller,"absorbRate",0.0,0.2).listen();
         gui.add(controller,"floatsx").listen();
         gui.add(controller,"floatsy").listen();
         gui.add(controller,"floatsz").listen();
@@ -386,6 +398,8 @@
             stats.update();
 
             spreadMat.uniforms._damping.value = controller.damping;
+            basicMaterial.uniforms._color.value = new THREE.Color(controller.color);
+            absorbMat.uniforms._absorbRate.value = controller.absorbRate;
             // pingpongMaterial.uniforms._damping.value = 1 + controller.damping/1000.;
             // pingpongMaterial.uniforms._mix.value = controller.mix;
             // pingpongMaterial.uniforms._floats.value = new THREE.Vector4(controller.floatsx, controller.floatsy, controller.floatsz, controller.floatsw);
