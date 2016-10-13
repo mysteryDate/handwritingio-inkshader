@@ -104,6 +104,7 @@
         uniform sampler2D _paperTex;
         uniform vec2 _iResolution;
         uniform float _absorbRate;
+        uniform float _spreadRate;
 
         // For mouse response
         uniform vec2 _hiPoint;
@@ -121,7 +122,7 @@
 
             float newWater = 0.;
             for(int i = 0; i < 4; i++) {
-                newWater += texture2D(_moveTex, vUv + offset[i] / _iResolution.xy)[i];
+                newWater += texture2D(_moveTex, vUv + offset[i] / _iResolution.xy * _spreadRate)[i];
             }
             newWater -= dot(texture2D(_moveTex, vUv), vec4(1.));
 
@@ -141,53 +142,6 @@
             tex.b += tex.g * _absorbRate;
 
             gl_FragColor = tex;
-        }
-    </script>
-
-    <script id="fragment-shader-pingpong" type="x-shader/x-fragment">
-        uniform sampler2D _mainTex;
-        uniform sampler2D _backBuffer;
-        uniform vec2 _iResolution;
-        uniform float _damping;
-        uniform vec3 _color;
-        varying vec2 vUv;
-
-        uniform float _mix;
-        uniform sampler2D _paperTex;
-
-        uniform vec2 _hiPoint;
-        uniform float _mouseDown;
-
-        uniform vec4 _floats;
-
-        vec2 offset[4];
-        float heights[4];
-
-        void main() {
-
-            offset[0] = vec2(-1.0,0.0);
-            offset[1] = vec2(1.0,0.0);
-            offset[2] = vec2(0.0,1.0);
-            offset[3] = vec2(0.0,-1.0);
-
-            vec3 sum = vec3(0.,0.,0.);
-            for(int i = 0; i < 4; i++) {
-                sum += texture2D(_mainTex, vUv + offset[i] / _iResolution.xy).rgb;
-            }
-            sum = (sum / 2.0) - texture2D(_backBuffer, vUv).rgb;
-            // sum *= 0.25;
-            sum *= _damping;
-            vec3 currentColor = texture2D(_mainTex, vUv).rgb;
-
-            float dist = 0.;
-            if(_mouseDown > 0.5) 
-            {
-                dist = smoothstep(_floats.z,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _floats.z * 20.;
-            }
-            float paperMix = pow(_mix * texture2D(_paperTex, vUv).r, _floats.x) * _floats.y;
-
-            gl_FragColor =vec4((1.-paperMix)*currentColor + paperMix*sum - dist * (vec3(1.,1.,1.) - _color), 1.);
-            // gl_FragColor =vec4((1.-paperMix)*currentColor + paperMix*sum + dist * _color, 1.);
         }
     </script>
 
@@ -242,73 +196,66 @@
         RTTPlane = new THREE.PlaneBufferGeometry( boundingBox.max.x - boundingBox.min.x, (boundingBox.max.x - boundingBox.min.x) / aspect );
         // --------
 
-        // Output scenes
-            // Basic output scene
-            var outputScene = new THREE.Scene();
-            var basicMaterial = new THREE.ShaderMaterial( {
-                uniforms: {
-                    _mainTex: {value: tex1.texture},
-                    _color: {value: new THREE.Color('#ffffff')}
-                },
-                vertexShader: document.getElementById('vertex-shader').textContent,
-                fragmentShader: document.getElementById('fragment-shader-simple').textContent
-            });
-            var outputPlane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
-            var outputQuad = new THREE.Mesh( outputPlane, basicMaterial );
-            outputScene.add( outputQuad );
-            // --------
+        // Basic output scene
+        var outputScene = new THREE.Scene();
+        var basicMaterial = new THREE.ShaderMaterial( {
+            uniforms: {
+                _mainTex: {value: tex1.texture},
+                _color: {value: new THREE.Color('#ffffff')}
+            },
+            vertexShader: document.getElementById('vertex-shader').textContent,
+            fragmentShader: document.getElementById('fragment-shader-simple').textContent
+        });
+        var outputPlane = new THREE.PlaneBufferGeometry( window.innerWidth, window.innerHeight );
+        var outputQuad = new THREE.Mesh( outputPlane, basicMaterial );
+        outputScene.add( outputQuad );
+        // --------
 
-            // Just for the writing mesh
-            var writingScene = new THREE.Scene();
+        // Just for the writing mesh
+        var writingScene = new THREE.Scene();
         // --------
 
         // Controller and gui
-            // var mesh, boundingBox;
-            var controller = {
-                degrees: 60,
-                lineWidth: 3.5,
-                color: "#00ff00",
-                damping: 1.,
-                absorbRate: 0.01,
+        var controller = {
+            degrees: 60,
+            lineWidth: 1.5,
+            color: "#000ff0",
+            fluidity: 1.,
+            absorbRate: 0.01,
+            spreadRate: 1.,
 
-                restart: function() {
-                    if (chiselMesh) {
-                        // TODO: dispose
-                        writingScene.remove(chiselMesh);
-                    }
-                    chiselMesh = new ChiselTipMesh({
-                        strokeData: TestStrokes[3].strokeData,
-                        degrees: controller.degrees,
-                        lineWidth: controller.lineWidth,
-                        color: new THREE.Color(controller.color),
-                    });
-                    chiselMesh.geometry.center();
-                    chiselMesh.material.wireframe = controller.wireframe;
-                    writingScene.add(chiselMesh);
-                    chiselMesh.start();
-
-                    // Properly size camera and RTTPlane for the render-to-texture operation
-                    // boundingBox = new THREE.Box3().setFromObject(chiselMesh);
-                    // var aspect = window.innerWidth / window.innerHeight;
-                    // cameraRTT = new THREE.OrthographicCamera( boundingBox.min.x, boundingBox.max.x, boundingBox.max.x / aspect, boundingBox.min.x / aspect, -10000, 10000 );
-                    // RTTPlane = new THREE.PlaneBufferGeometry( boundingBox.max.x - boundingBox.min.x, (boundingBox.max.x - boundingBox.min.x) / aspect );
-                    // ------------
-                },
-
-                clear: function() {
+            restart: function() {
+                if (chiselMesh) {
+                    // TODO: dispose
                     writingScene.remove(chiselMesh);
-                    chiselMesh.start();
                 }
-            }
-            controller.restart();
+                chiselMesh = new ChiselTipMesh({
+                    strokeData: TestStrokes[3].strokeData,
+                    degrees: controller.degrees,
+                    lineWidth: controller.lineWidth,
+                    color: new THREE.Color(controller.color),
+                });
+                chiselMesh.geometry.center();
+                chiselMesh.material.wireframe = controller.wireframe;
+                writingScene.add(chiselMesh);
+                chiselMesh.start();
+            },
 
-            gui.add(controller, "degrees", 0, 359).onChange(controller.restart);
-            gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
-            gui.addColor(controller, "color").listen();
-            gui.add(controller,"damping",0.,1.).listen();
-            gui.add(controller,"absorbRate",0.0,0.2).listen();
-            gui.add(controller, "restart");
-            gui.add(controller, "clear");
+            clear: function() {
+                writingScene.remove(chiselMesh);
+                chiselMesh.start();
+            }
+        }
+        controller.restart();
+
+        gui.add(controller, "degrees", 0, 359).onChange(controller.restart);
+        gui.add(controller, "lineWidth", 0.1, 10).onChange(controller.restart);
+        gui.addColor(controller, "color").listen();
+        gui.add(controller,"fluidity",0.,1.).listen();
+        gui.add(controller,"absorbRate",0.0,0.5).listen();
+        gui.add(controller,"spreadRate",1.,5.).listen();
+        gui.add(controller, "restart");
+        gui.add(controller, "clear");
         // --------
 
         // Fancy scenes for ping-ponging
@@ -353,7 +300,8 @@
                     _absorbRate: {value: 0.},
                     _iResolution: { value: new THREE.Vector2( texRes.x, texRes.y)},
                     _hiPoint: {value: new THREE.Vector2(0.,0.)},
-                    _mouseDown: {value: 0.}
+                    _mouseDown: {value: 0.},
+                    _spreadRate: {valeu: 1.}
                 },
                 vertexShader: document.getElementById( 'vertex-shader' ).textContent,
                 fragmentShader: document.getElementById( 'fragment-shader-water-absorb' ).textContent
@@ -369,9 +317,10 @@
             requestAnimationFrame(render);
             stats.update();
 
-            spreadMat.uniforms._damping.value = controller.damping;
+            spreadMat.uniforms._damping.value = controller.fluidity;
             basicMaterial.uniforms._color.value = new THREE.Color(controller.color);
             absorbMat.uniforms._absorbRate.value = controller.absorbRate;
+            absorbMat.uniforms._spreadRate.value = controller.spreadRate;
 
             if ( chiselMesh.isAnimating() ) 
             {
