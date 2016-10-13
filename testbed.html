@@ -22,7 +22,6 @@
 </head>
 <body>
 
-
     <script id="vertex-shader" type="x-shader/x-vertex">
         varying vec2 vUv;
         void main() {
@@ -37,22 +36,7 @@
         uniform sampler2D _paperTex;
 
         void main() {
-            // gl_FragColor = texture2D( _paperTex, vUv) + texture2D( _mainTex, vUv );
             gl_FragColor = texture2D( _mainTex, vUv );
-        }
-    </script>
-
-    <script id="fragment-shader-copy-texture" type="x-shader/x-fragment">
-        varying vec2 vUv;
-        uniform sampler2D _mainTex;
-
-        void main() {
-            // gl_FragColor = vec4(texture2D( _mainTex, vUv ).r,0.,0.,0.);
-            gl_FragColor = vec4(0.,0.,0.,0.);
-            if(vUv.x < 0.6 && vUv.y < 0.6 && vUv.x > 0.4 && vUv.y > 0.4)
-            {
-                gl_FragColor.g = 1.;
-            }
         }
     </script>
 
