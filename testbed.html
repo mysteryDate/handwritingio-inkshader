@@ -143,7 +143,7 @@
             tex.g *= (1. - _absorbRate);
             tex.b += tex.g * _absorbRate;
 
-            gl_FragColor = tex;
+            gl_FragColor = max(vec4(0.),tex);
         }
     </script>
 
