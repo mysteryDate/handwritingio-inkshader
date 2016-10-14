@@ -91,7 +91,8 @@
             // Find all directions in which the water is goign down
             vec4 differences = max(vec4(0.), grad + vec4(1.) * (waterHeight + paperHeight));
             // Normalize it
-            differences /= dot(differences, vec4(1.));
+            float sum = dot(differences, vec4(1.));
+            differences = (sum == 0.) ? differences : differences/sum;
             // Scale it by waterHeight and damping
             gl_FragColor = differences * waterHeight * _damping;
         }
@@ -143,7 +144,7 @@
             tex.g *= (1. - _absorbRate);
             tex.b += tex.g * _absorbRate;
 
-            gl_FragColor = max(vec4(0.),tex);
+            gl_FragColor = tex;
         }
     </script>
 
