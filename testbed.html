@@ -122,14 +122,16 @@
 
             float newWater = 0.;
             for(int i = 0; i < 4; i++) {
+            	// Sum the water moving from neighboring texels
                 newWater += texture2D(_moveTex, vUv + offset[i] / _iResolution.xy * _spreadRate)[i];
             }
+            // Subtract the value of water that's moving to other texels
             newWater -= dot(texture2D(_moveTex, vUv), vec4(1.));
 
+            // For drawing on the screen
             float dist = 0.;
             if(_mouseDown > 0.5) 
             {
-                // dist = 1.;
                 dist = smoothstep(_iResolution.x / 32.,0.,length(_hiPoint.xy - gl_FragCoord.xy)) / _iResolution.x * 32. * 50.;
             }
             newWater += dist;
@@ -330,6 +332,7 @@
                 renderer.render( spreadScene, cameraRTT, moveTex);
                 renderer.render( absorbScene, cameraRTT, tex2 );
 
+                // Ping pong textures
                 var a = tex1;
                 tex1 = tex2;
                 tex2 = a;
